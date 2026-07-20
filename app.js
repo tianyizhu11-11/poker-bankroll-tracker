@@ -139,10 +139,10 @@ function computeMonthCompare() {
   return { thisAgg: aggregate(thisList), lastAgg: aggregate(lastList) };
 }
 
-function computeTrendWindow(months) {
+function computeTrendWindow(days) {
   const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
-  const startStr = start.getFullYear() + "-" + String(start.getMonth() + 1).padStart(2, "0") + "-01";
+  const start = new Date(now.getTime() - days * 24 * 3600 * 1000);
+  const startStr = start.getFullYear() + "-" + String(start.getMonth() + 1).padStart(2, "0") + "-" + String(start.getDate()).padStart(2, "0");
   const list = sessions.filter(s => s.date && s.date >= startStr).sort((a, b) => sortKey(a) < sortKey(b) ? -1 : 1);
   if (!list.length) return null;
   return { list, agg: aggregate(list) };
@@ -421,7 +421,7 @@ function renderOverview() {
   });
   const barPoints = asc.map(s => ({ value: computeMetrics(s).profit, label: fmtDate(s.date), fullLabel: fmtDateFull(s.date) }));
 
-  const trendWindow = computeTrendWindow(3);
+  const trendWindow = computeTrendWindow(90);
   let trendPoints = null;
   if (trendWindow) {
     let tCum = 0;
