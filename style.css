@@ -61,6 +61,14 @@ html, body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 body {
   min-height: 100dvh;
@@ -147,7 +155,7 @@ body {
   font-size: 12px;
   color: var(--text-muted);
 }
-svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; }
+svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-action: pan-y; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .chart-tooltip {
   position: absolute;
   pointer-events: none;
