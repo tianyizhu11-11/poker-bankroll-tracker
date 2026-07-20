@@ -61,6 +61,7 @@ html, body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+  overflow-x: hidden;
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
