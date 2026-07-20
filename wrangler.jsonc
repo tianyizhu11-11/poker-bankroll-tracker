@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "poker-bankroll-tracker",
+  "main": "worker.js",
+  "compatibility_date": "2026-07-20",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "poker-bankroll",
+      "database_id": "f35a4454-bf6d-463e-aa02-d1bf0eefbc92"
+    }
+  ],
+  "secrets_store_secrets": [
+    {
+      "binding": "APP_PASSWORD",
+      "store_id": "427627162a2b4fa2ab4c1d56338d0116",
+      "secret_name": "PBT_APP_PASSWORD"
+    }
+  ]
+}

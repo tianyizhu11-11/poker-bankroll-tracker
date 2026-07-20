@@ -1,0 +1,824 @@
+(() => {
+"use strict";
+
+const STORAGE_KEY = "pbt_sessions_v1";
+const AUTH_KEY = "pbt_auth_token";
+const API_URL = "/api/sessions";
+const VB_W = 300, VB_H = 150;
+const PAD = { l: 8, r: 8, t: 14, b: 10 };
+
+let sessions = loadSessions();
+let activeTab = "overview";
+let editingId = null;
+let lastDeleted = null;
+let toastTimer = null;
+
+// ---------- storage ----------
+function loadSessions() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function saveSessions() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  syncToServer();
+}
+function uid() {
+  return (crypto.randomUUID ? crypto.randomUUID() : "id-" + Date.now() + "-" + Math.random().toString(16).slice(2));
+}
+
+// ---------- cross-device sync ----------
+function getAuthToken() {
+  let t = localStorage.getItem(AUTH_KEY);
+  if (!t) {
+    t = prompt("请输入写入密码(同步到其他设备需要):") || "";
+    if (t) localStorage.setItem(AUTH_KEY, t);
+  }
+  return t;
+}
+let syncInFlight = null;
+function syncToServer() {
+  const token = getAuthToken();
+  if (!token) return;
+  const payload = JSON.stringify(sessions);
+  syncInFlight = fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: payload,
+  }).then(res => {
+    if (res.status === 401) {
+      localStorage.removeItem(AUTH_KEY);
+      showToast("密码错误,数据仅保存在本机,请重新保存以同步");
+      return false;
+    }
+    if (!res.ok) { showToast("同步失败,数据已保存在本机"); return false; }
+    return true;
+  }).catch(() => {
+    showToast("网络异常,数据已保存在本机");
+    return false;
+  });
+  return syncInFlight;
+}
+async function syncFromServer() {
+  try {
+    const res = await fetch(API_URL);
+    if (!res.ok) return;
+    const serverData = await res.json();
+    if (!Array.isArray(serverData)) return;
+    if (serverData.length > 0) {
+      sessions = serverData.map(s => ({
+        id: s.id, date: s.date, gameType: s.gameType, stakes: s.stakes, location: s.location,
+        startTime: s.startTime, endTime: s.endTime, buyIn: s.buyIn, rebuy: s.rebuy,
+        cashOut: s.cashOut, expenses: s.expenses, notes: s.notes,
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+      renderView();
+    } else if (sessions.length > 0) {
+      syncToServer();
+    }
+  } catch (e) { /* offline: keep local cache */ }
+}
+
+// ---------- domain math ----------
+function toDate(dateStr, timeStr) {
+  return new Date(dateStr + "T" + (timeStr || "00:00") + ":00");
+}
+function computeMetrics(s) {
+  const buyIn = +s.buyIn || 0, rebuy = +s.rebuy || 0, cashOut = +s.cashOut || 0, expenses = +s.expenses || 0;
+  const profit = cashOut - buyIn - rebuy - expenses;
+  const atRisk = buyIn + rebuy;
+  const roi = atRisk > 0 ? (profit / atRisk) * 100 : null;
+  let durationMin = 0;
+  if (s.startTime && s.endTime) {
+    const start = toDate(s.date, s.startTime);
+    let end = toDate(s.date, s.endTime);
+    if (end <= start) end = new Date(end.getTime() + 24 * 3600 * 1000);
+    durationMin = (end - start) / 60000;
+  }
+  const durationHr = durationMin / 60;
+  const hourly = durationHr > 0 ? profit / durationHr : null;
+  return { profit, atRisk, roi, durationMin, durationHr, hourly };
+}
+function sortKey(s) { return s.date + "T" + (s.startTime || "00:00"); }
+function sortedAsc() { return [...sessions].sort((a, b) => sortKey(a) < sortKey(b) ? -1 : 1); }
+function sortedDesc() { return [...sessions].sort((a, b) => sortKey(a) > sortKey(b) ? -1 : 1); }
+
+function aggregate() {
+  if (!sessions.length) return null;
+  let totalProfit = 0, totalAtRisk = 0, totalHr = 0, wins = 0;
+  sessions.forEach(s => {
+    const m = computeMetrics(s);
+    totalProfit += m.profit;
+    totalAtRisk += m.atRisk;
+    totalHr += m.durationHr;
+    if (m.profit > 0) wins++;
+  });
+  return {
+    totalProfit,
+    count: sessions.length,
+    totalHr,
+    avgHourly: totalHr > 0 ? totalProfit / totalHr : null,
+    roi: totalAtRisk > 0 ? (totalProfit / totalAtRisk) * 100 : null,
+    winRate: (wins / sessions.length) * 100,
+  };
+}
+
+function isTournamentType(gameType) { return /锦标|tournament|mtt/i.test(gameType || ""); }
+
+function summarizeGroup(list) {
+  let buyIn = 0, rebuy = 0, cashOutRaw = 0, profit = 0, hours = 0, wins = 0;
+  list.forEach(s => {
+    const m = computeMetrics(s);
+    buyIn += +s.buyIn || 0;
+    rebuy += +s.rebuy || 0;
+    cashOutRaw += (+s.cashOut || 0) - (+s.expenses || 0);
+    profit += m.profit;
+    hours += m.durationHr;
+    if (m.profit > 0) wins++;
+  });
+  const count = list.length;
+  const totalBuyIn = buyIn + rebuy;
+  return {
+    count, hours, totalBuyIn, cashOutRaw, profit, rebuy,
+    hourly: hours > 0 ? profit / hours : null,
+    roi: totalBuyIn > 0 ? (profit / totalBuyIn) * 100 : null,
+    winRate: count > 0 ? (wins / count) * 100 : 0,
+    avgBuyIn: count > 0 ? totalBuyIn / count : 0,
+    avgProfit: count > 0 ? profit / count : 0,
+    avgRebuy: count > 0 ? rebuy / count : 0,
+  };
+}
+
+function computeTypeBreakdown() {
+  const cashList = [], tournList = [];
+  sessions.forEach(s => (isTournamentType(s.gameType) ? tournList : cashList).push(s));
+  return { cash: summarizeGroup(cashList), tournament: summarizeGroup(tournList), total: summarizeGroup(sessions) };
+}
+
+function computeGameBreakdown() {
+  const map = new Map();
+  sessions.forEach(s => {
+    const key = (s.stakes || s.gameType || "未分类").trim() || "未分类";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(s);
+  });
+  const rows = [...map.entries()].map(([name, list]) => ({ name, ...summarizeGroup(list) }));
+  rows.sort((a, b) => b.hours - a.hours);
+  return rows;
+}
+
+// ---------- formatting ----------
+function money(v) {
+  const sign = v < 0 ? "-" : "";
+  return sign + "¥" + Math.abs(Math.round(v)).toLocaleString("zh-CN");
+}
+function moneySigned(v) { return (v > 0 ? "+" : "") + money(v); }
+function pct(v) { if (v == null) return "--"; return (v > 0 ? "+" : "") + v.toFixed(1) + "%"; }
+function fmtHours(hr) {
+  if (hr == null || !isFinite(hr)) return "--";
+  const h = Math.floor(hr);
+  const m = Math.round((hr - h) * 60);
+  return h + "h" + (m ? m + "m" : "");
+}
+function fmtDate(d) {
+  const [y, m, day] = d.split("-");
+  return `${m}/${day}`;
+}
+function fmtDateFull(d) {
+  const [y, m, day] = d.split("-");
+  return `${y}年${m}月${day}日`;
+}
+
+// ---------- charts ----------
+function niceRange(values) {
+  let min = Math.min(...values, 0), max = Math.max(...values, 0);
+  if (min === max) { min -= 1; max += 1; }
+  const padAmt = (max - min) * 0.12 || 1;
+  return [min - padAmt, max + padAmt];
+}
+
+function moneyCompactSigned(v) {
+  const sign = v < 0 ? "-" : v > 0 ? "+" : "";
+  const abs = Math.abs(v);
+  const body = abs >= 1000 ? (abs / 1000).toFixed(1) + "k" : String(Math.round(abs));
+  return sign + "¥" + body;
+}
+
+function drawLineChart(wrap, points) {
+  wrap.innerHTML = "";
+  if (points.length < 2) {
+    wrap.innerHTML = '<div class="empty-state" style="padding:24px"><p>数据不足,再记一局看曲线</p></div>';
+    return;
+  }
+  const [min, max] = niceRange(points.map(p => p.value));
+  const P = { l: 38, r: PAD.r, t: PAD.t, b: PAD.b };
+  const innerW = VB_W - P.l - P.r, innerH = VB_H - P.t - P.b;
+  const xAt = i => P.l + (i / (points.length - 1)) * innerW;
+  const yAt = v => P.t + innerH - ((v - min) / (max - min)) * innerH;
+
+  let grid = "";
+  let axisLabels = "";
+  [0, 0.5, 1].forEach(f => {
+    const y = P.t + innerH * f;
+    grid += `<line x1="${P.l}" y1="${y}" x2="${VB_W - P.r}" y2="${y}" stroke="var(--grid)" stroke-width="1"/>`;
+    const value = max - (max - min) * f;
+    axisLabels += `<text x="${P.l - 4}" y="${y.toFixed(2)}" font-size="9" fill="var(--text-muted)" text-anchor="end" dominant-baseline="middle">${moneyCompactSigned(value)}</text>`;
+  });
+  if (min < 0 && max > 0) {
+    const y0 = yAt(0);
+    grid += `<line x1="${P.l}" y1="${y0.toFixed(2)}" x2="${VB_W - P.r}" y2="${y0.toFixed(2)}" stroke="var(--baseline)" stroke-width="1"/>`;
+  }
+
+  const d = points.map((p, i) => (i === 0 ? "M" : "L") + xAt(i).toFixed(2) + "," + yAt(p.value).toFixed(2)).join(" ");
+  const lastX = xAt(points.length - 1), lastY = yAt(points[points.length - 1].value);
+
+  wrap.innerHTML = `
+    <svg class="chart" viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="none">
+      ${grid}
+      <path d="${d}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${lastX.toFixed(2)}" cy="${lastY.toFixed(2)}" r="4" fill="var(--series-1)" stroke="var(--surface)" stroke-width="2"/>
+      <line class="hover-line" x1="0" y1="${P.t}" x2="0" y2="${VB_H - P.b}" stroke="var(--text-muted)" stroke-width="1" opacity="0"/>
+      <circle class="hover-dot" r="4.5" fill="var(--series-1)" stroke="var(--surface)" stroke-width="2" opacity="0"/>
+      ${axisLabels}
+    </svg>
+    <div class="chart-axis-labels" style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);padding:2px 4px 0;margin-left:${((P.l / VB_W) * 100).toFixed(1)}%">
+      <span>${points[0].label}</span><span>${points[points.length - 1].label}</span>
+    </div>
+  `;
+  const tooltip = document.createElement("div");
+  tooltip.className = "chart-tooltip";
+  wrap.appendChild(tooltip);
+
+  const svgEl = wrap.querySelector("svg");
+  const hoverLine = svgEl.querySelector(".hover-line");
+  const hoverDot = svgEl.querySelector(".hover-dot");
+
+  function handleMove(evt) {
+    const rect = svgEl.getBoundingClientRect();
+    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+    const relX = ((clientX - rect.left) / rect.width) * VB_W;
+    let idx = Math.round(((relX - P.l) / innerW) * (points.length - 1));
+    idx = Math.max(0, Math.min(points.length - 1, idx));
+    const px = xAt(idx), py = yAt(points[idx].value);
+    hoverLine.setAttribute("x1", px); hoverLine.setAttribute("x2", px); hoverLine.setAttribute("opacity", 1);
+    hoverDot.setAttribute("cx", px); hoverDot.setAttribute("cy", py); hoverDot.setAttribute("opacity", 1);
+    tooltip.style.left = (px / VB_W) * 100 + "%";
+    tooltip.style.top = (py / VB_H) * 100 + "%";
+    tooltip.textContent = `${points[idx].fullLabel}  ${moneySigned(points[idx].value)}`;
+    tooltip.classList.add("show");
+  }
+  function handleLeave() {
+    hoverLine.setAttribute("opacity", 0);
+    hoverDot.setAttribute("opacity", 0);
+    tooltip.classList.remove("show");
+  }
+  svgEl.addEventListener("pointermove", handleMove);
+  svgEl.addEventListener("pointerdown", handleMove);
+  svgEl.addEventListener("pointerleave", handleLeave);
+}
+
+function drawBarChart(wrap, points) {
+  wrap.innerHTML = "";
+  if (!points.length) {
+    wrap.innerHTML = '<div class="empty-state" style="padding:24px"><p>还没有记录</p></div>';
+    return;
+  }
+  const [min, max] = niceRange(points.map(p => p.value));
+  const innerW = VB_W - PAD.l - PAD.r, innerH = VB_H - PAD.t - PAD.b;
+  const yAt = v => PAD.t + innerH - ((v - min) / (max - min)) * innerH;
+  const y0 = yAt(0);
+  const n = points.length;
+  const slot = innerW / n;
+  const barW = Math.max(3, Math.min(20, slot * 0.6));
+
+  let bars = "";
+  points.forEach((p, i) => {
+    const cx = PAD.l + slot * i + slot / 2;
+    const x = cx - barW / 2;
+    const yv = yAt(p.value);
+    const positive = p.value >= 0;
+    const top = Math.min(yv, y0), bottom = Math.max(yv, y0);
+    const h = Math.max(bottom - top, 1.5);
+    const r = Math.min(3, barW / 2, h / 2);
+    const color = positive ? "var(--good)" : "var(--critical)";
+    let d;
+    if (positive) {
+      d = `M ${x},${bottom} L ${x},${(top + r).toFixed(2)} Q ${x},${top} ${(x + r).toFixed(2)},${top} L ${(x + barW - r).toFixed(2)},${top} Q ${(x + barW).toFixed(2)},${top} ${(x + barW).toFixed(2)},${(top + r).toFixed(2)} L ${(x + barW).toFixed(2)},${bottom} Z`;
+    } else {
+      d = `M ${x},${top} L ${x},${(bottom - r).toFixed(2)} Q ${x},${bottom} ${(x + r).toFixed(2)},${bottom} L ${(x + barW - r).toFixed(2)},${bottom} Q ${(x + barW).toFixed(2)},${bottom} ${(x + barW).toFixed(2)},${(bottom - r).toFixed(2)} L ${(x + barW).toFixed(2)},${top} Z`;
+    }
+    bars += `<path data-idx="${i}" data-cx="${cx.toFixed(2)}" d="${d}" fill="${color}"/>`;
+  });
+
+  wrap.innerHTML = `
+    <svg class="chart" viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="none">
+      <line x1="${PAD.l}" y1="${y0.toFixed(2)}" x2="${VB_W - PAD.r}" y2="${y0.toFixed(2)}" stroke="var(--baseline)" stroke-width="1"/>
+      ${bars}
+    </svg>
+    <div class="chart-axis-labels" style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);padding:2px 4px 0">
+      <span>${points[0].label}</span><span>${points[points.length - 1].label}</span>
+    </div>
+  `;
+  const tooltip = document.createElement("div");
+  tooltip.className = "chart-tooltip";
+  wrap.appendChild(tooltip);
+  const svgEl = wrap.querySelector("svg");
+  const centers = points.map((p, i) => PAD.l + slot * i + slot / 2);
+
+  function nearestIdx(clientX) {
+    const rect = svgEl.getBoundingClientRect();
+    const relX = ((clientX - rect.left) / rect.width) * VB_W;
+    let best = 0, bestD = Infinity;
+    centers.forEach((cx, i) => { const dist = Math.abs(cx - relX); if (dist < bestD) { bestD = dist; best = i; } });
+    return best;
+  }
+  function handleMove(evt) {
+    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+    const idx = nearestIdx(clientX);
+    const p = points[idx];
+    const cx = centers[idx], cy = yAt(p.value);
+    tooltip.style.left = (cx / VB_W) * 100 + "%";
+    tooltip.style.top = (cy / VB_H) * 100 + "%";
+    tooltip.textContent = `${p.fullLabel}  ${moneySigned(p.value)}`;
+    tooltip.classList.add("show");
+  }
+  function handleLeave() { tooltip.classList.remove("show"); }
+  svgEl.addEventListener("pointermove", handleMove);
+  svgEl.addEventListener("pointerdown", handleMove);
+  svgEl.addEventListener("pointerleave", handleLeave);
+}
+
+// ---------- views ----------
+const view = document.getElementById("view");
+
+function renderOverview() {
+  const agg = aggregate();
+  if (!agg) {
+    view.innerHTML = `
+      <div class="empty-state">
+        <div class="big">🃏</div>
+        <p>还没有任何记录</p>
+        <p>点右下角 + 记一局吧</p>
+      </div>`;
+    return;
+  }
+  const asc = sortedAsc();
+  let cum = 0;
+  const linePoints = [{ value: 0, label: fmtDate(asc[0].date), fullLabel: "起点" }];
+  asc.forEach(s => {
+    cum += computeMetrics(s).profit;
+    linePoints.push({ value: cum, label: fmtDate(s.date), fullLabel: fmtDateFull(s.date) });
+  });
+  const barPoints = asc.map(s => ({ value: computeMetrics(s).profit, label: fmtDate(s.date), fullLabel: fmtDateFull(s.date) }));
+
+  view.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-tile"><div class="label">总盈亏</div><div class="value ${agg.totalProfit >= 0 ? "good" : "bad"}">${moneySigned(agg.totalProfit)}</div></div>
+      <div class="stat-tile"><div class="label">总局数</div><div class="value">${agg.count}</div></div>
+      <div class="stat-tile"><div class="label">总时长</div><div class="value">${fmtHours(agg.totalHr)}</div></div>
+      <div class="stat-tile"><div class="label">平均时薪</div><div class="value ${agg.avgHourly >= 0 ? "good" : "bad"}">${agg.avgHourly == null ? "--" : moneySigned(agg.avgHourly) + "/h"}</div></div>
+      <div class="stat-tile"><div class="label">ROI</div><div class="value ${(agg.roi ?? 0) >= 0 ? "good" : "bad"}">${pct(agg.roi)}</div></div>
+      <div class="stat-tile"><div class="label">胜率</div><div class="value">${agg.winRate.toFixed(0)}%</div></div>
+    </div>
+
+    <div class="chart-card">
+      <h3>资金曲线</h3>
+      <p class="chart-sub">按时间累计盈亏</p>
+      <div class="chart-wrap" id="lineChartWrap"></div>
+    </div>
+
+    <div class="chart-card">
+      <h3>单局盈亏</h3>
+      <p class="chart-sub">绿色赢局 · 红色输局</p>
+      <div class="chart-wrap" id="barChartWrap"></div>
+    </div>
+
+    ${renderTypeSummaryHTML(computeTypeBreakdown())}
+    ${renderSessionStatsHTML(computeTypeBreakdown())}
+    ${renderGameBreakdownHTML(computeGameBreakdown())}
+  `;
+  drawLineChart(document.getElementById("lineChartWrap"), linePoints);
+  drawBarChart(document.getElementById("barChartWrap"), barPoints);
+}
+
+function fmtCell(value, kind) {
+  if (kind === "money") return `<div class="dt-val">${money(value)}</div>`;
+  if (kind === "signedMoney") return `<div class="dt-val ${value >= 0 ? "good" : "bad"}">${moneySigned(value)}</div>`;
+  if (kind === "count") return `<div class="dt-val">${value}</div>`;
+  if (kind === "hours") return `<div class="dt-val">${fmtHours(value)}</div>`;
+  if (kind === "pct") return `<div class="dt-val ${(value ?? 0) >= 0 ? "good" : "bad"}">${pct(value)}</div>`;
+  if (kind === "winrate") return `<div class="dt-val">${value.toFixed(0)}%</div>`;
+  if (kind === "hourly") return `<div class="dt-val ${value == null ? "" : value >= 0 ? "good" : "bad"}">${value == null ? "--" : moneySigned(value) + "/h"}</div>`;
+  return `<div class="dt-val">${value}</div>`;
+}
+function dtRow(label, values, kind) {
+  return `<div class="dt-row"><div class="dt-label">${label}</div>${values.map(v => fmtCell(v, kind)).join("")}</div>`;
+}
+const DT_HEAD = `<div class="dt-row dt-head"><div class="dt-label"></div><div class="dt-val">现金局</div><div class="dt-val">锦标赛</div><div class="dt-val">总计</div></div>`;
+
+function renderTypeSummaryHTML(b) {
+  const cols = [b.cash, b.tournament, b.total];
+  return `
+    <div class="chart-card">
+      <h3>摘要</h3>
+      ${DT_HEAD}
+      ${dtRow("买入", cols.map(c => c.totalBuyIn), "money")}
+      ${dtRow("提现", cols.map(c => c.cashOutRaw), "money")}
+      ${dtRow("净利润", cols.map(c => c.profit), "signedMoney")}
+    </div>`;
+}
+
+function renderSessionStatsHTML(b) {
+  const cols = [b.cash, b.tournament, b.total];
+  return `
+    <div class="chart-card">
+      <h3>对局</h3>
+      ${DT_HEAD}
+      ${dtRow("对局", cols.map(c => c.count), "count")}
+      ${dtRow("小时", cols.map(c => c.hours), "hours")}
+      ${dtRow("$/小时", cols.map(c => c.hourly), "hourly")}
+      ${dtRow("ROI", cols.map(c => c.roi), "pct")}
+      ${dtRow("获胜", cols.map(c => c.winRate), "winrate")}
+      ${dtRow("平均买入", cols.map(c => c.avgBuyIn), "money")}
+      ${dtRow("平均利润", cols.map(c => c.avgProfit), "signedMoney")}
+      ${dtRow("平均补充买入", cols.map(c => c.avgRebuy), "money")}
+    </div>`;
+}
+
+function renderGameBreakdownHTML(rows) {
+  if (!rows.length) return "";
+  return `
+    <div class="chart-card">
+      <h3>游戏分类</h3>
+      <p class="chart-sub">按小时数排序</p>
+      ${rows.map(r => `
+        <div class="game-row">
+          <div style="min-width:0">
+            <div class="game-name">${escapeHtml(r.name)}</div>
+            <div class="game-meta">${fmtHours(r.hours)} · ${r.count}局</div>
+          </div>
+          <div class="game-side">
+            <div class="game-total ${r.profit >= 0 ? "good" : "bad"}">${moneySigned(r.profit)}</div>
+            <div class="game-meta">${r.hourly == null ? "--" : moneySigned(r.hourly) + "/h"}</div>
+          </div>
+        </div>`).join("")}
+    </div>`;
+}
+
+function renderSessions() {
+  if (!sessions.length) {
+    view.innerHTML = `
+      <div class="empty-state">
+        <div class="big">🃏</div>
+        <p>还没有任何记录</p>
+        <p>点右下角 + 记一局吧</p>
+      </div>`;
+    return;
+  }
+  const list = sortedDesc();
+  view.innerHTML = `<div class="section-title">全部记录</div>` + list.map(s => {
+    const m = computeMetrics(s);
+    const title = [s.gameType, s.stakes].filter(Boolean).join(" · ") || "未命名场次";
+    const meta = [fmtDateFull(s.date), s.location].filter(Boolean).join(" · ");
+    return `
+      <div class="session-row" data-id="${s.id}">
+        <div class="session-main">
+          <div class="title">${escapeHtml(title)}</div>
+          <div class="meta">${escapeHtml(meta)}${m.durationHr ? " · " + fmtHours(m.durationHr) : ""}</div>
+        </div>
+        <div class="session-side">
+          <div class="profit ${m.profit >= 0 ? "good" : "bad"}">${moneySigned(m.profit)}</div>
+          <div class="hourly">${m.hourly == null ? "" : moneySigned(m.hourly) + "/h"}</div>
+        </div>
+      </div>`;
+  }).join("");
+  view.querySelectorAll(".session-row").forEach(row => {
+    row.addEventListener("click", () => openSheet(row.dataset.id));
+  });
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function renderView() {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === activeTab));
+  if (activeTab === "overview") renderOverview();
+  else renderSessions();
+}
+
+// ---------- tabs & fab ----------
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => { activeTab = btn.dataset.tab; renderView(); });
+});
+document.getElementById("fab").addEventListener("click", () => openSheet(null));
+
+// ---------- add/edit sheet ----------
+const overlay = document.getElementById("overlay");
+const sheetEl = document.getElementById("sheet");
+
+const GAME_TYPES = ["NL Texas Holdem", "PLO", "短牌 Short Deck", "锦标赛 MTT", "其他"];
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+function openSheet(id) {
+  editingId = id;
+  const s = id ? sessions.find(x => x.id === id) : {
+    id: uid(), date: todayStr(), gameType: "NL Texas Holdem", stakes: "", location: "",
+    startTime: "", endTime: "", buyIn: "", rebuy: "", cashOut: "", expenses: "", notes: "",
+  };
+  sheetEl.innerHTML = `
+    <h2>${id ? "编辑场次" : "记一局"}</h2>
+    <div class="field">
+      <label>日期</label>
+      <input type="date" id="f-date" value="${s.date}" />
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>游戏类型</label>
+        <input list="gameTypeList" id="f-gameType" value="${escapeHtml(s.gameType || "")}" placeholder="NL Texas Holdem" />
+        <datalist id="gameTypeList">${GAME_TYPES.map(g => `<option value="${g}">`).join("")}</datalist>
+      </div>
+      <div class="field">
+        <label>盲注</label>
+        <input type="text" id="f-stakes" value="${escapeHtml(s.stakes || "")}" placeholder="0.5/1" />
+      </div>
+    </div>
+    <div class="field">
+      <label>地点</label>
+      <input type="text" id="f-location" value="${escapeHtml(s.location || "")}" placeholder="俱乐部 / 地址" />
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>开始时间</label>
+        <input type="time" id="f-start" value="${s.startTime || ""}" />
+      </div>
+      <div class="field">
+        <label>结束时间</label>
+        <input type="time" id="f-end" value="${s.endTime || ""}" />
+      </div>
+    </div>
+    <div class="row3">
+      <div class="field">
+        <label>买入</label>
+        <input type="number" inputmode="decimal" id="f-buyIn" value="${s.buyIn}" placeholder="0" />
+      </div>
+      <div class="field">
+        <label>补充买入</label>
+        <input type="number" inputmode="decimal" id="f-rebuy" value="${s.rebuy}" placeholder="0" />
+      </div>
+      <div class="field">
+        <label>兑现</label>
+        <input type="number" inputmode="decimal" id="f-cashOut" value="${s.cashOut}" placeholder="0" />
+      </div>
+    </div>
+    <div class="field">
+      <label>其他支出(交通/小费等)</label>
+      <input type="number" inputmode="decimal" id="f-expenses" value="${s.expenses}" placeholder="0" />
+    </div>
+    <div class="field">
+      <label>备注</label>
+      <textarea id="f-notes" rows="2" placeholder="选填">${escapeHtml(s.notes || "")}</textarea>
+    </div>
+
+    <div class="computed-preview">
+      <div><div class="k">盈亏</div><div class="v" id="p-profit">--</div></div>
+      <div><div class="k">时薪</div><div class="v" id="p-hourly">--</div></div>
+      <div><div class="k">ROI</div><div class="v" id="p-roi">--</div></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="btn-cancel">取消</button>
+      <button class="btn btn-primary" id="btn-save">保存</button>
+    </div>
+    ${id ? '<div class="btn-row"><button class="btn btn-danger" id="btn-delete">删除这条记录</button></div>' : ""}
+  `;
+  overlay.classList.remove("hidden");
+
+  const fields = ["date", "gameType", "stakes", "location", "start", "end", "buyIn", "rebuy", "cashOut", "expenses", "notes"];
+  function readForm() {
+    return {
+      id: s.id,
+      date: document.getElementById("f-date").value || todayStr(),
+      gameType: document.getElementById("f-gameType").value.trim(),
+      stakes: document.getElementById("f-stakes").value.trim(),
+      location: document.getElementById("f-location").value.trim(),
+      startTime: document.getElementById("f-start").value,
+      endTime: document.getElementById("f-end").value,
+      buyIn: document.getElementById("f-buyIn").value,
+      rebuy: document.getElementById("f-rebuy").value,
+      cashOut: document.getElementById("f-cashOut").value,
+      expenses: document.getElementById("f-expenses").value,
+      notes: document.getElementById("f-notes").value.trim(),
+    };
+  }
+  function updatePreview() {
+    const m = computeMetrics(readForm());
+    const pf = document.getElementById("p-profit"), ph = document.getElementById("p-hourly"), pr = document.getElementById("p-roi");
+    pf.textContent = moneySigned(m.profit); pf.className = "v " + (m.profit >= 0 ? "good" : "bad");
+    ph.textContent = m.hourly == null ? "--" : moneySigned(m.hourly) + "/h"; ph.className = "v " + (m.hourly >= 0 ? "good" : "bad");
+    pr.textContent = pct(m.roi); pr.className = "v " + ((m.roi ?? 0) >= 0 ? "good" : "bad");
+  }
+  ["f-buyIn", "f-rebuy", "f-cashOut", "f-expenses", "f-start", "f-end", "f-date"].forEach(id => {
+    document.getElementById(id).addEventListener("input", updatePreview);
+  });
+  updatePreview();
+
+  document.getElementById("btn-cancel").addEventListener("click", closeSheet);
+  document.getElementById("btn-save").addEventListener("click", () => {
+    const data = readForm();
+    const idx = sessions.findIndex(x => x.id === data.id);
+    if (idx >= 0) sessions[idx] = data; else sessions.push(data);
+    saveSessions();
+    closeSheet();
+    renderView();
+  });
+  const delBtn = document.getElementById("btn-delete");
+  if (delBtn) delBtn.addEventListener("click", () => {
+    const idx = sessions.findIndex(x => x.id === s.id);
+    if (idx >= 0) {
+      lastDeleted = { data: sessions[idx], idx };
+      sessions.splice(idx, 1);
+      saveSessions();
+      closeSheet();
+      renderView();
+      showUndoToast("已删除该记录");
+    }
+  });
+}
+function closeSheet() { overlay.classList.add("hidden"); sheetEl.innerHTML = ""; editingId = null; }
+overlay.addEventListener("click", e => { if (e.target === overlay) closeSheet(); });
+
+// ---------- toast ----------
+const toastEl = document.getElementById("toast");
+function showUndoToast(message) {
+  clearTimeout(toastTimer);
+  toastEl.innerHTML = `<span>${message}</span> <button id="undoBtn" style="margin-left:10px;background:none;border:none;color:var(--series-1);font-weight:600;font-size:13px;">撤销</button>`;
+  toastEl.classList.remove("hidden");
+  document.getElementById("undoBtn").addEventListener("click", () => {
+    if (lastDeleted) {
+      sessions.splice(lastDeleted.idx, 0, lastDeleted.data);
+      saveSessions();
+      renderView();
+      lastDeleted = null;
+    }
+    hideToast();
+  });
+  toastTimer = setTimeout(hideToast, 5000);
+}
+function hideToast() { toastEl.classList.add("hidden"); }
+function showToast(message) {
+  clearTimeout(toastTimer);
+  toastEl.innerHTML = `<span>${message}</span>`;
+  toastEl.classList.remove("hidden");
+  toastTimer = setTimeout(hideToast, 3000);
+}
+
+// ---------- CSV import (Poker Bankroll Tracker export format) ----------
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], next = text[i + 1];
+    if (inQuotes) {
+      if (c === '"' && next === '"') { field += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ",") { row.push(field); field = ""; }
+      else if (c === "\n" || c === "\r") {
+        if (c === "\r" && next === "\n") i++;
+        row.push(field); field = "";
+        rows.push(row); row = [];
+      } else field += c;
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.length > 1);
+}
+
+const PBT_TYPE_LABEL = { Casino: "赌场", "Home Game": "家庭局", Online: "线上" };
+
+function pbtRowsToSessions(rows) {
+  const header = rows[0];
+  const idx = {};
+  header.forEach((h, i) => (idx[h.trim()] = i));
+  const get = (r, name) => { const v = r[idx[name]]; return v == null ? "" : v; };
+  const num = (r, name) => { const v = get(r, name); return v === "" ? 0 : parseFloat(v) || 0; };
+
+  return rows.slice(1).filter(r => r.length > 1 && get(r, "starttime")).map(r => {
+    const startRaw = get(r, "starttime");
+    const date = startRaw.slice(0, 10);
+    const startTime = startRaw.slice(11, 16);
+    const startDate = new Date(startRaw.replace(" ", "T"));
+    const playingMin = num(r, "playingminutes");
+    const endDate = new Date(startDate.getTime() + playingMin * 60000);
+    const endTime = String(endDate.getHours()).padStart(2, "0") + ":" + String(endDate.getMinutes()).padStart(2, "0");
+
+    const variant = get(r, "variant");
+    const isTourn = variant === "Tournament";
+    const gameType = isTourn ? "锦标赛" : "现金局";
+
+    const sb = num(r, "smallblind"), bb = num(r, "bigblind"), third = num(r, "3rdblind"), ante = num(r, "ante");
+    const gameRaw = get(r, "game").trim();
+    let stakes;
+    if (isTourn) stakes = gameRaw;
+    else if (sb > 0 || bb > 0) stakes = sb + "/" + bb + (third > 0 ? "/" + third : "") + (ante > 0 ? " ante" + ante : "");
+    else stakes = gameRaw;
+
+    const buyIn = num(r, "buyin");
+    const rebuy = num(r, "rebuycosts") + num(r, "addoncosts") + num(r, "bountycosts");
+    const expenses = num(r, "expenses");
+    const cashOut = num(r, "cashout") + num(r, "bounties") + expenses;
+
+    const notesParts = [];
+    const sessionNote = get(r, "sessionnote").trim();
+    if (sessionNote) notesParts.push(sessionNote);
+    const rawNotes = get(r, "notes").trim();
+    if (rawNotes) {
+      try {
+        const arr = JSON.parse(rawNotes);
+        if (Array.isArray(arr)) arr.forEach(item => { if (item && item.n) notesParts.push(item.n); });
+        else notesParts.push(rawNotes);
+      } catch (e) { notesParts.push(rawNotes); }
+    }
+    const typeField = get(r, "type");
+    if (typeField) notesParts.push("场地类型: " + (PBT_TYPE_LABEL[typeField] || typeField));
+    if (isTourn) {
+      const player = get(r, "player"), place = get(r, "place"), itm = get(r, "itm");
+      const bits = [];
+      if (player && player !== "0") bits.push(player + "人参赛");
+      if (place && place !== "0") bits.push("第" + place + "名");
+      if (itm && itm !== "0") bits.push("进钱圈");
+      if (bits.length) notesParts.push(bits.join(" · "));
+    } else if (gameRaw && gameRaw !== stakes) {
+      notesParts.push("原始记录: " + gameRaw);
+    }
+
+    return {
+      id: "pbt-" + get(r, "id"),
+      date, gameType, stakes,
+      location: get(r, "location").trim(),
+      startTime, endTime,
+      buyIn, rebuy, cashOut, expenses,
+      notes: notesParts.join("\n"),
+    };
+  });
+}
+
+const importBtn = document.getElementById("importBtn");
+const importFile = document.getElementById("importFile");
+importBtn.addEventListener("click", () => importFile.click());
+importFile.addEventListener("change", () => {
+  const file = importFile.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let imported;
+    try {
+      const rows = parseCSV(String(reader.result));
+      imported = pbtRowsToSessions(rows);
+    } catch (e) {
+      showToast("CSV 解析失败,请检查文件格式");
+      return;
+    }
+    if (!imported.length) { showToast("没有找到可导入的记录"); return; }
+    confirmImport(imported);
+  };
+  reader.readAsText(file, "utf-8");
+  importFile.value = "";
+});
+
+function confirmImport(imported) {
+  sheetEl.innerHTML = `
+    <h2>导入数据</h2>
+    <p style="color:var(--text-secondary);font-size:14px;line-height:1.6">
+      检测到 <strong>${imported.length}</strong> 条记录。<br/>
+      导入将<strong style="color:var(--critical)">清空当前全部 ${sessions.length} 条记录</strong>并替换为这些数据,此操作不可撤销。
+    </p>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="btn-import-cancel">取消</button>
+      <button class="btn btn-primary" id="btn-import-confirm">确认替换</button>
+    </div>
+  `;
+  overlay.classList.remove("hidden");
+  document.getElementById("btn-import-cancel").addEventListener("click", closeSheet);
+  document.getElementById("btn-import-confirm").addEventListener("click", () => {
+    sessions = imported;
+    saveSessions();
+    closeSheet();
+    activeTab = "sessions";
+    renderView();
+    showToast(`已导入 ${imported.length} 条记录`);
+  });
+}
+
+// ---------- init ----------
+renderView();
+syncFromServer();
+})();
