@@ -171,7 +171,7 @@ function computeGameBreakdown() {
 // ---------- formatting ----------
 function money(v) {
   const sign = v < 0 ? "-" : "";
-  return sign + "¥" + Math.abs(Math.round(v)).toLocaleString("zh-CN");
+  return sign + "¥" + Math.round(Math.abs(v)).toLocaleString("zh-CN");
 }
 function moneySigned(v) { return (v > 0 ? "+" : "") + money(v); }
 function pct(v) { if (v == null) return "--"; return (v > 0 ? "+" : "") + v.toFixed(1) + "%"; }
