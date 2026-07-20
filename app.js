@@ -757,7 +757,7 @@ function renderProfitDistHTML(d) {
   if (cashAbs > 0) segs.push({ pct: (cashAbs / total) * 100, color: "var(--series-1)" });
   if (tournAbs > 0) segs.push({ pct: (tournAbs / total) * 100, color: "var(--series-4)" });
   return `
-    <p class="chart-sub" style="text-align:center">您的赢利分布:</p>
+    <p class="chart-sub" style="text-align:center">您的波动占比分布:</p>
     <div style="display:flex;height:38px;border-radius:8px;overflow:hidden;margin-bottom:20px">
       ${segs.map(s => `<div style="width:${s.pct.toFixed(1)}%;background:${s.color};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#0b0b0b">${s.pct.toFixed(0)}%</div>`).join("")}
     </div>`;
