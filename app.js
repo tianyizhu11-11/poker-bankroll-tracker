@@ -105,10 +105,11 @@ function sortKey(s) { return s.date + "T" + (s.startTime || "00:00"); }
 function sortedAsc() { return [...sessions].sort((a, b) => sortKey(a) < sortKey(b) ? -1 : 1); }
 function sortedDesc() { return [...sessions].sort((a, b) => sortKey(a) > sortKey(b) ? -1 : 1); }
 
-function aggregate() {
-  if (!sessions.length) return null;
+function aggregate(list) {
+  list = list || sessions;
+  if (!list.length) return null;
   let totalProfit = 0, totalAtRisk = 0, totalHr = 0, wins = 0;
-  sessions.forEach(s => {
+  list.forEach(s => {
     const m = computeMetrics(s);
     totalProfit += m.profit;
     totalAtRisk += m.atRisk;
@@ -117,12 +118,34 @@ function aggregate() {
   });
   return {
     totalProfit,
-    count: sessions.length,
+    count: list.length,
     totalHr,
     avgHourly: totalHr > 0 ? totalProfit / totalHr : null,
     roi: totalAtRisk > 0 ? (totalProfit / totalAtRisk) * 100 : null,
-    winRate: (wins / sessions.length) * 100,
+    winRate: (wins / list.length) * 100,
   };
+}
+
+function monthKey(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0"); }
+
+function computeMonthCompare() {
+  const now = new Date();
+  const thisMonth = monthKey(now);
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonth = monthKey(lastMonthDate);
+  const thisList = sessions.filter(s => s.date && s.date.startsWith(thisMonth));
+  const lastList = sessions.filter(s => s.date && s.date.startsWith(lastMonth));
+  if (!thisList.length && !lastList.length) return null;
+  return { thisAgg: aggregate(thisList), lastAgg: aggregate(lastList) };
+}
+
+function computeTrendWindow(months) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+  const startStr = start.getFullYear() + "-" + String(start.getMonth() + 1).padStart(2, "0") + "-01";
+  const list = sessions.filter(s => s.date && s.date >= startStr).sort((a, b) => sortKey(a) < sortKey(b) ? -1 : 1);
+  if (!list.length) return null;
+  return { list, agg: aggregate(list) };
 }
 
 function isTournamentType(gameType) { return /锦标|tournament|mtt/i.test(gameType || ""); }
@@ -398,6 +421,17 @@ function renderOverview() {
   });
   const barPoints = asc.map(s => ({ value: computeMetrics(s).profit, label: fmtDate(s.date), fullLabel: fmtDateFull(s.date) }));
 
+  const trendWindow = computeTrendWindow(3);
+  let trendPoints = null;
+  if (trendWindow) {
+    let tCum = 0;
+    trendPoints = [{ value: 0, label: fmtDate(trendWindow.list[0].date), fullLabel: "起点" }];
+    trendWindow.list.forEach(s => {
+      tCum += computeMetrics(s).profit;
+      trendPoints.push({ value: tCum, label: fmtDate(s.date), fullLabel: fmtDateFull(s.date) });
+    });
+  }
+
   view.innerHTML = `
     <div class="stat-grid">
       <div class="stat-tile"><div class="label">总盈亏</div><div class="value ${agg.totalProfit >= 0 ? "good" : "bad"}">${moneySigned(agg.totalProfit)}</div></div>
@@ -424,9 +458,75 @@ function renderOverview() {
     ${renderSessionStatsHTML(computeTypeBreakdown())}
     ${renderGameBreakdownHTML(computeGameBreakdown())}
     ${renderTournamentDetailHTML(computeTournamentDetail())}
+    ${renderMonthCompareHTML(computeMonthCompare())}
+    ${renderTrendHTML(trendWindow)}
   `;
   drawLineChart(document.getElementById("lineChartWrap"), linePoints);
   drawBarChart(document.getElementById("barChartWrap"), barPoints);
+  if (trendPoints) drawLineChart(document.getElementById("trendChartWrap"), trendPoints);
+}
+
+function renderMonthCompareHTML(mc) {
+  if (!mc) return "";
+  const { thisAgg, lastAgg } = mc;
+  const plainPair = (a, b) => `${a == null ? "--" : a}<span class="compare-sep">/</span>${b == null ? "--" : b}`;
+  const moneyPair = (a, b) => {
+    const fa = a == null ? '<span class="muted">--</span>' : `<span class="${a >= 0 ? "good" : "bad"}">${moneySigned(a)}</span>`;
+    const fb = b == null ? '<span class="muted">--</span>' : `<span class="${b >= 0 ? "good" : "bad"}">${moneySigned(b)}</span>`;
+    return `${fa}<span class="compare-sep">/</span>${fb}`;
+  };
+  const hourlyPair = (a, b) => {
+    const fa = a == null ? '<span class="muted">--</span>' : `<span class="${a >= 0 ? "good" : "bad"}">${moneySigned(a)}</span>`;
+    const fb = b == null ? '<span class="muted">--</span>' : `<span class="${b >= 0 ? "good" : "bad"}">${moneySigned(b)}</span>`;
+    return `${fa}<span class="compare-sep">/</span>${fb}`;
+  };
+  const pctPair = (a, b) => {
+    const fa = a == null ? '<span class="muted">--</span>' : `<span class="${a >= 0 ? "good" : "bad"}">${pct(a)}</span>`;
+    const fb = b == null ? '<span class="muted">--</span>' : `<span class="${b >= 0 ? "good" : "bad"}">${pct(b)}</span>`;
+    return `${fa}<span class="compare-sep">/</span>${fb}`;
+  };
+  return `
+    <div class="chart-card">
+      <h3 style="text-align:center">本月 / 上月</h3>
+      <div class="compare-grid">
+        <div class="compare-cell">
+          <div class="compare-value">${plainPair(thisAgg ? thisAgg.count : 0, lastAgg ? lastAgg.count : 0)}</div>
+          <div class="compare-label">对局</div>
+        </div>
+        <div class="compare-cell">
+          <div class="compare-value">${plainPair(thisAgg ? Math.round(thisAgg.totalHr) : 0, lastAgg ? Math.round(lastAgg.totalHr) : 0)}</div>
+          <div class="compare-label">小时</div>
+        </div>
+        <div class="compare-cell">
+          <div class="compare-value">${moneyPair(thisAgg ? thisAgg.totalProfit : null, lastAgg ? lastAgg.totalProfit : null)}</div>
+          <div class="compare-label">净利润</div>
+        </div>
+        <div class="compare-cell">
+          <div class="compare-value">${hourlyPair(thisAgg ? thisAgg.avgHourly : null, lastAgg ? lastAgg.avgHourly : null)}</div>
+          <div class="compare-label">HOURLY</div>
+        </div>
+      </div>
+      <div class="compare-roi">
+        <div class="compare-value">${pctPair(thisAgg ? thisAgg.roi : null, lastAgg ? lastAgg.roi : null)}</div>
+        <div class="compare-label">ROI</div>
+      </div>
+    </div>`;
+}
+
+function renderTrendHTML(tw) {
+  if (!tw) return "";
+  const agg = tw.agg;
+  return `
+    <div class="chart-card">
+      <h3 style="text-align:center">三个月趋势</h3>
+      <div class="chart-wrap" id="trendChartWrap"></div>
+      <div class="stat-grid" style="margin-top:12px">
+        <div class="stat-tile"><div class="label">小时</div><div class="value">${Math.round(agg.totalHr)}</div></div>
+        <div class="stat-tile"><div class="label">HOURLY</div><div class="value ${(agg.avgHourly ?? 0) >= 0 ? "good" : "bad"}">${agg.avgHourly == null ? "--" : moneySigned(agg.avgHourly) + "/h"}</div></div>
+        <div class="stat-tile"><div class="label">ROI</div><div class="value ${(agg.roi ?? 0) >= 0 ? "good" : "bad"}">${pct(agg.roi)}</div></div>
+        <div class="stat-tile"><div class="label">净利润</div><div class="value ${agg.totalProfit >= 0 ? "good" : "bad"}">${moneySigned(agg.totalProfit)}</div></div>
+      </div>
+    </div>`;
 }
 
 function fmtCell(value, kind) {

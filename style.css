@@ -241,6 +241,33 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
 .game-row .game-total.good { color: var(--good-text); }
 .game-row .game-total.bad { color: var(--critical); }
 
+/* ---- month compare & trend ---- */
+.compare-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  text-align: center;
+}
+.compare-cell { padding: 6px 2px; }
+.compare-value {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.compare-sep { color: var(--text-muted); margin: 0 2px; font-weight: 400; }
+.compare-value .good { color: var(--good-text); }
+.compare-value .bad { color: var(--critical); }
+.compare-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.compare-roi {
+  text-align: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.compare-roi .compare-value { font-size: 16px; }
+.muted { color: var(--text-muted); }
+
 /* ---- fab & tabbar ---- */
 .fab {
   position: fixed;
