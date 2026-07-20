@@ -697,8 +697,14 @@ function computeLocationDetail(name) {
     curvePoints.push({ value: cum, label: fmtDate(s.date), fullLabel: fmtDateFull(s.date) });
   });
 
-  let best = list[0], bestProfit = -Infinity;
-  list.forEach(s => { const p = computeMetrics(s).profit; if (p > bestProfit) { bestProfit = p; best = s; } });
+  function bestOf(list) {
+    if (!list.length) return null;
+    let best = list[0], bestProfit = -Infinity;
+    list.forEach(s => { const p = computeMetrics(s).profit; if (p > bestProfit) { bestProfit = p; best = s; } });
+    return best;
+  }
+  const bestCash = bestOf(cashList);
+  const bestTourn = bestOf(tournList);
 
   const desc = [...list].sort((a, b) => sortKey(a) > sortKey(b) ? -1 : 1);
   const byYear = new Map();
@@ -713,8 +719,17 @@ function computeLocationDetail(name) {
     cashCount: cashList.length, tournCount: tournList.length,
     wins, losses, winRate: list.length ? (wins / list.length) * 100 : 0,
     cashSummary: summarizeGroup(cashList), tournSummary: summarizeGroup(tournList), totalSummary: summarizeGroup(list),
-    curvePoints, best, byYear,
+    curvePoints, bestCash, bestTourn, byYear,
   };
+}
+
+function sessionIconHTML(s) {
+  const isTourn = isTournamentType(s.gameType);
+  const color = isTourn ? "var(--series-4)" : "var(--series-1)";
+  const symbol = isTourn
+    ? `<circle cx="12" cy="12" r="7" stroke="#fff" stroke-width="1.6" fill="none"/><path d="M12 9v3l2 1.4" stroke="#fff" stroke-width="1.6" stroke-linecap="round" fill="none"/>`
+    : `<text x="12" y="16.5" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">$</text>`;
+  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:${color};flex:none;margin-right:6px"><svg width="16" height="16" viewBox="0 0 24 24">${symbol}</svg></span>`;
 }
 
 function renderLocSessionRow(s) {
@@ -723,7 +738,7 @@ function renderLocSessionRow(s) {
   return `
     <div class="session-row" style="cursor:default">
       <div class="session-main">
-        <div class="title">${escapeHtml(title)}</div>
+        <div class="title" style="display:flex;align-items:center">${sessionIconHTML(s)}${escapeHtml(title)}</div>
         <div class="meta">${escapeHtml(s.location || "")}</div>
       </div>
       <div class="session-side">
@@ -779,7 +794,8 @@ function openLocationDetail(name) {
       </div>
     </div>
     <div class="section-title" style="text-align:center">最佳对局</div>
-    ${renderLocSessionRow(d.best)}
+    ${d.bestCash ? renderLocSessionRow(d.bestCash) : ""}
+    ${d.bestTourn ? renderLocSessionRow(d.bestTourn) : ""}
     ${[...d.byYear.entries()].map(([year, list]) => `
       <div class="section-title" style="text-align:center;margin-top:18px">${year}</div>
       ${list.map(s => renderLocSessionRow(s)).join("")}
