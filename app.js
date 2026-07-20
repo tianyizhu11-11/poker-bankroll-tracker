@@ -217,6 +217,26 @@ function computeGameBreakdown() {
   return rows;
 }
 
+function extractVenueType(list) {
+  for (const s of list) {
+    const m = /场地类型:\s*(\S+)/.exec(s.notes || "");
+    if (m) return m[1];
+  }
+  return "";
+}
+
+function computeLocationBreakdown() {
+  const map = new Map();
+  sessions.forEach(s => {
+    const key = (s.location || "未知地点").trim() || "未知地点";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(s);
+  });
+  const rows = [...map.entries()].map(([name, list]) => ({ name, venueType: extractVenueType(list), ...summarizeGroup(list) }));
+  rows.sort((a, b) => b.profit - a.profit);
+  return rows;
+}
+
 // ---------- formatting ----------
 function money(v) {
   const sign = v < 0 ? "-" : "";
@@ -611,6 +631,30 @@ function renderGameBreakdownHTML(rows) {
     </div>`;
 }
 
+function renderLocations() {
+  const rows = computeLocationBreakdown();
+  if (!rows.length) {
+    view.innerHTML = `
+      <div class="empty-state">
+        <div class="big">🃏</div>
+        <p>还没有任何记录</p>
+        <p>点右下角 + 记一局吧</p>
+      </div>`;
+    return;
+  }
+  view.innerHTML = rows.map(r => `
+    <div class="loc-card">
+      <div class="loc-top">
+        <div style="min-width:0">
+          <div class="loc-name">${escapeHtml(r.name)}</div>
+          ${r.venueType ? `<div class="loc-sub">${escapeHtml(r.venueType)}</div>` : ""}
+        </div>
+        <div class="loc-total ${r.profit >= 0 ? "good" : "bad"}">${moneySigned(r.profit)}</div>
+      </div>
+      <div class="loc-detail">${r.count}局 · ${fmtHours(r.hours)} · ${r.hourly == null ? "--" : moneySigned(r.hourly) + "/h"} · <span class="${r.winRate >= 50 ? "good" : ""}">${r.winRate.toFixed(0)}% 获胜</span></div>
+    </div>`).join("");
+}
+
 function renderSessions() {
   if (!sessions.length) {
     view.innerHTML = `
@@ -650,6 +694,7 @@ function escapeHtml(str) {
 function renderView() {
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === activeTab));
   if (activeTab === "overview") renderOverview();
+  else if (activeTab === "locations") renderLocations();
   else renderSessions();
 }
 
