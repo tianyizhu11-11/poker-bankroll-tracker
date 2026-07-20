@@ -727,7 +727,7 @@ function pbtRowsToSessions(rows) {
     const sb = num(r, "smallblind"), bb = num(r, "bigblind"), third = num(r, "3rdblind"), ante = num(r, "ante");
     const gameRaw = get(r, "game").trim();
     let stakes;
-    if (isTourn) stakes = gameRaw;
+    if (isTourn) stakes = "";
     else if (sb > 0 || bb > 0) stakes = sb + "/" + bb + (third > 0 ? "/" + third : "") + (ante > 0 ? " ante" + ante : "");
     else stakes = gameRaw;
 
@@ -752,6 +752,7 @@ function pbtRowsToSessions(rows) {
     if (isTourn) {
       const player = get(r, "player"), place = get(r, "place"), itm = get(r, "itm");
       const bits = [];
+      if (gameRaw) bits.push(gameRaw);
       if (player && player !== "0") bits.push(player + "人参赛");
       if (place && place !== "0") bits.push("第" + place + "名");
       if (itm && itm !== "0") bits.push("进钱圈");
