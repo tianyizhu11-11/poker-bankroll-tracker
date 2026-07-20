@@ -171,7 +171,7 @@ function computeGameBreakdown() {
 // ---------- formatting ----------
 function money(v) {
   const sign = v < 0 ? "-" : "";
-  return sign + "¥" + Math.round(Math.abs(v)).toLocaleString("zh-CN");
+  return sign + "$" + Math.round(Math.abs(v)).toLocaleString("zh-CN");
 }
 function moneySigned(v) { return (v > 0 ? "+" : "") + money(v); }
 function pct(v) { if (v == null) return "--"; return (v > 0 ? "+" : "") + v.toFixed(1) + "%"; }
@@ -202,7 +202,7 @@ function moneyCompactSigned(v) {
   const sign = v < 0 ? "-" : v > 0 ? "+" : "";
   const abs = Math.abs(v);
   const body = abs >= 1000 ? (abs / 1000).toFixed(1) + "k" : String(Math.round(abs));
-  return sign + "¥" + body;
+  return sign + "$" + body;
 }
 
 function drawLineChart(wrap, points) {
