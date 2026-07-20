@@ -71,7 +71,7 @@ async function syncFromServer() {
         id: s.id, date: s.date, gameType: s.gameType, stakes: s.stakes, location: s.location,
         startTime: s.startTime, endTime: s.endTime, buyIn: s.buyIn, rebuy: s.rebuy,
         cashOut: s.cashOut, expenses: s.expenses, notes: s.notes,
-        bigBlind: s.bigBlind || 0, place: s.place || 0, bounties: s.bounties || 0,
+        bigBlind: s.bigBlind || 0, place: s.place || 0, bounties: s.bounties || 0, players: s.players || 0,
       }));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
       renderView();
@@ -163,18 +163,20 @@ function computeTypeBreakdown() {
 function computeTournamentDetail() {
   const list = sessions.filter(s => isTournamentType(s.gameType));
   if (!list.length) return null;
-  let bounties = 0, itm = 0, runnerUp = 0, wins = 0;
+  let bounties = 0, itm = 0, runnerUp = 0, wins = 0, finalTable = 0;
   list.forEach(s => {
     bounties += +s.bounties || 0;
     const rawCashout = (+s.cashOut || 0) - (+s.bounties || 0) - (+s.expenses || 0);
     if (rawCashout > 0) itm++;
     if (+s.place === 2) runnerUp++;
     if (+s.place === 1) wins++;
+    if (+s.place > 0 && +s.place <= 9 && +s.players > 9) finalTable++;
   });
   const count = list.length;
   return {
     count, bounties,
     itm, itmPct: (itm / count) * 100,
+    finalTable, finalTablePct: (finalTable / count) * 100,
     runnerUp, runnerUpPct: (runnerUp / count) * 100,
     wins, winsPct: (wins / count) * 100,
   };
@@ -481,6 +483,7 @@ function renderTournamentDetailHTML(d) {
       <div class="dt-row"><div class="dt-label">赏金奖金</div><div class="dt-val" style="grid-column: 2 / span 3">${money(d.bounties)}</div></div>
       <div class="dt-row"><div class="dt-label">对局</div><div class="dt-val" style="grid-column: 2 / span 3">${d.count}</div></div>
       <div class="dt-row"><div class="dt-label">ITM</div><div class="dt-val" style="grid-column: 2 / span 3">${d.itm} (${d.itmPct.toFixed(1)}%)</div></div>
+      <div class="dt-row"><div class="dt-label">Final Table</div><div class="dt-val" style="grid-column: 2 / span 3">${d.finalTable} (${d.finalTablePct.toFixed(1)}%)</div></div>
       <div class="dt-row"><div class="dt-label">亚军</div><div class="dt-val" style="grid-column: 2 / span 3">${d.runnerUp} (${d.runnerUpPct.toFixed(1)}%)</div></div>
       <div class="dt-row"><div class="dt-label">胜利</div><div class="dt-val" style="grid-column: 2 / span 3">${d.wins} (${d.winsPct.toFixed(1)}%)</div></div>
     </div>`;
@@ -778,6 +781,7 @@ function pbtRowsToSessions(rows) {
     const cashOut = num(r, "cashout") + bounties + expenses;
     const bigBlind = bb;
     const place = num(r, "place");
+    const players = num(r, "player");
 
     const notesParts = [];
     const sessionNote = get(r, "sessionnote").trim();
@@ -793,10 +797,9 @@ function pbtRowsToSessions(rows) {
     const typeField = get(r, "type");
     if (typeField) notesParts.push("场地类型: " + (PBT_TYPE_LABEL[typeField] || typeField));
     if (isTourn) {
-      const player = get(r, "player");
       const bits = [];
       if (gameRaw) bits.push(gameRaw);
-      if (player && player !== "0") bits.push(player + "人参赛");
+      if (players > 0) bits.push(players + "人参赛");
       if (place > 0) bits.push("第" + place + "名");
       if (bits.length) notesParts.push(bits.join(" · "));
     } else if (gameRaw && gameRaw !== stakes) {
@@ -809,7 +812,7 @@ function pbtRowsToSessions(rows) {
       location: get(r, "location").trim(),
       startTime, endTime,
       buyIn, rebuy, cashOut, expenses,
-      bigBlind, place, bounties,
+      bigBlind, place, bounties, players,
       notes: notesParts.join("\n"),
     };
   });
