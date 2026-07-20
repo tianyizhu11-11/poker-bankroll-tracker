@@ -2,6 +2,9 @@ async function ensureSchema(db) {
   await db.prepare(
     `CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, date TEXT, gameType TEXT, stakes TEXT, location TEXT, startTime TEXT, endTime TEXT, buyIn REAL, rebuy REAL, cashOut REAL, expenses REAL, notes TEXT)`
   ).run();
+  for (const col of ["bigBlind REAL DEFAULT 0", "place REAL DEFAULT 0", "bounties REAL DEFAULT 0"]) {
+    try { await db.prepare(`ALTER TABLE sessions ADD COLUMN ${col}`).run(); } catch (e) { /* column already exists */ }
+  }
 }
 
 async function isAuthorized(request, env) {
@@ -13,7 +16,7 @@ async function isAuthorized(request, env) {
 
 async function handleGet(env) {
   const { results } = await env.DB.prepare(
-    "SELECT id, date, gameType, stakes, location, startTime, endTime, buyIn, rebuy, cashOut, expenses, notes FROM sessions ORDER BY date, startTime"
+    "SELECT id, date, gameType, stakes, location, startTime, endTime, buyIn, rebuy, cashOut, expenses, notes, bigBlind, place, bounties FROM sessions ORDER BY date, startTime"
   ).all();
   return Response.json(results);
 }
@@ -25,12 +28,12 @@ async function handlePost(request, env) {
   for (const s of sessions) {
     stmts.push(
       env.DB.prepare(
-        `INSERT INTO sessions (id, date, gameType, stakes, location, startTime, endTime, buyIn, rebuy, cashOut, expenses, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO sessions (id, date, gameType, stakes, location, startTime, endTime, buyIn, rebuy, cashOut, expenses, notes, bigBlind, place, bounties)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).bind(
         String(s.id), s.date || "", s.gameType || "", s.stakes || "", s.location || "",
         s.startTime || "", s.endTime || "", +s.buyIn || 0, +s.rebuy || 0, +s.cashOut || 0,
-        +s.expenses || 0, s.notes || ""
+        +s.expenses || 0, s.notes || "", +s.bigBlind || 0, +s.place || 0, +s.bounties || 0
       )
     );
   }

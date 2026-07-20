@@ -71,6 +71,7 @@ async function syncFromServer() {
         id: s.id, date: s.date, gameType: s.gameType, stakes: s.stakes, location: s.location,
         startTime: s.startTime, endTime: s.endTime, buyIn: s.buyIn, rebuy: s.rebuy,
         cashOut: s.cashOut, expenses: s.expenses, notes: s.notes,
+        bigBlind: s.bigBlind || 0, place: s.place || 0, bounties: s.bounties || 0,
       }));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
       renderView();
@@ -128,6 +129,7 @@ function isTournamentType(gameType) { return /锦标|tournament|mtt/i.test(gameT
 
 function summarizeGroup(list) {
   let buyIn = 0, rebuy = 0, cashOutRaw = 0, profit = 0, hours = 0, wins = 0;
+  let bbProfitSum = 0, bbHours = 0;
   list.forEach(s => {
     const m = computeMetrics(s);
     buyIn += +s.buyIn || 0;
@@ -136,12 +138,14 @@ function summarizeGroup(list) {
     profit += m.profit;
     hours += m.durationHr;
     if (m.profit > 0) wins++;
+    if (+s.bigBlind > 0) { bbProfitSum += m.profit / (+s.bigBlind); bbHours += m.durationHr; }
   });
   const count = list.length;
   const totalBuyIn = buyIn + rebuy;
   return {
     count, hours, totalBuyIn, cashOutRaw, profit, rebuy,
     hourly: hours > 0 ? profit / hours : null,
+    bbHourly: bbHours > 0 ? bbProfitSum / bbHours : null,
     roi: totalBuyIn > 0 ? (profit / totalBuyIn) * 100 : null,
     winRate: count > 0 ? (wins / count) * 100 : 0,
     avgBuyIn: count > 0 ? totalBuyIn / count : 0,
@@ -154,6 +158,26 @@ function computeTypeBreakdown() {
   const cashList = [], tournList = [];
   sessions.forEach(s => (isTournamentType(s.gameType) ? tournList : cashList).push(s));
   return { cash: summarizeGroup(cashList), tournament: summarizeGroup(tournList), total: summarizeGroup(sessions) };
+}
+
+function computeTournamentDetail() {
+  const list = sessions.filter(s => isTournamentType(s.gameType));
+  if (!list.length) return null;
+  let bounties = 0, itm = 0, runnerUp = 0, wins = 0;
+  list.forEach(s => {
+    bounties += +s.bounties || 0;
+    const rawCashout = (+s.cashOut || 0) - (+s.bounties || 0) - (+s.expenses || 0);
+    if (rawCashout > 0) itm++;
+    if (+s.place === 2) runnerUp++;
+    if (+s.place === 1) wins++;
+  });
+  const count = list.length;
+  return {
+    count, bounties,
+    itm, itmPct: (itm / count) * 100,
+    runnerUp, runnerUpPct: (runnerUp / count) * 100,
+    wins, winsPct: (wins / count) * 100,
+  };
 }
 
 function computeGameBreakdown() {
@@ -396,6 +420,7 @@ function renderOverview() {
 
     ${renderTypeSummaryHTML(computeTypeBreakdown())}
     ${renderSessionStatsHTML(computeTypeBreakdown())}
+    ${renderTournamentDetailHTML(computeTournamentDetail())}
     ${renderGameBreakdownHTML(computeGameBreakdown())}
   `;
   drawLineChart(document.getElementById("lineChartWrap"), linePoints);
@@ -410,6 +435,7 @@ function fmtCell(value, kind) {
   if (kind === "pct") return `<div class="dt-val ${(value ?? 0) >= 0 ? "good" : "bad"}">${pct(value)}</div>`;
   if (kind === "winrate") return `<div class="dt-val">${value.toFixed(0)}%</div>`;
   if (kind === "hourly") return `<div class="dt-val ${value == null ? "" : value >= 0 ? "good" : "bad"}">${value == null ? "--" : moneySigned(value) + "/h"}</div>`;
+  if (kind === "bb") return `<div class="dt-val ${value == null ? "" : value >= 0 ? "good" : "bad"}">${value == null ? "--" : (value > 0 ? "+" : "") + value.toFixed(2)}</div>`;
   return `<div class="dt-val">${value}</div>`;
 }
 function dtRow(label, values, kind) {
@@ -438,11 +464,25 @@ function renderSessionStatsHTML(b) {
       ${dtRow("对局", cols.map(c => c.count), "count")}
       ${dtRow("小时", cols.map(c => c.hours), "hours")}
       ${dtRow("$/小时", cols.map(c => c.hourly), "hourly")}
+      ${dtRow("BB/小时", [b.cash.bbHourly, null, null], "bb")}
       ${dtRow("ROI", cols.map(c => c.roi), "pct")}
       ${dtRow("获胜", cols.map(c => c.winRate), "winrate")}
       ${dtRow("平均买入", cols.map(c => c.avgBuyIn), "money")}
       ${dtRow("平均利润", cols.map(c => c.avgProfit), "signedMoney")}
       ${dtRow("平均补充买入", cols.map(c => c.avgRebuy), "money")}
+    </div>`;
+}
+
+function renderTournamentDetailHTML(d) {
+  if (!d) return "";
+  return `
+    <div class="chart-card">
+      <h3>锦标赛详情</h3>
+      <div class="dt-row"><div class="dt-label">赏金奖金</div><div class="dt-val" style="grid-column: 2 / span 3">${money(d.bounties)}</div></div>
+      <div class="dt-row"><div class="dt-label">对局</div><div class="dt-val" style="grid-column: 2 / span 3">${d.count}</div></div>
+      <div class="dt-row"><div class="dt-label">ITM</div><div class="dt-val" style="grid-column: 2 / span 3">${d.itm} (${d.itmPct.toFixed(1)}%)</div></div>
+      <div class="dt-row"><div class="dt-label">亚军</div><div class="dt-val" style="grid-column: 2 / span 3">${d.runnerUp} (${d.runnerUpPct.toFixed(1)}%)</div></div>
+      <div class="dt-row"><div class="dt-label">胜利</div><div class="dt-val" style="grid-column: 2 / span 3">${d.wins} (${d.winsPct.toFixed(1)}%)</div></div>
     </div>`;
 }
 
@@ -734,7 +774,10 @@ function pbtRowsToSessions(rows) {
     const buyIn = num(r, "buyin");
     const rebuy = num(r, "rebuycosts") + num(r, "addoncosts") + num(r, "bountycosts");
     const expenses = num(r, "expenses");
-    const cashOut = num(r, "cashout") + num(r, "bounties") + expenses;
+    const bounties = num(r, "bounties");
+    const cashOut = num(r, "cashout") + bounties + expenses;
+    const bigBlind = bb;
+    const place = num(r, "place");
 
     const notesParts = [];
     const sessionNote = get(r, "sessionnote").trim();
@@ -750,12 +793,11 @@ function pbtRowsToSessions(rows) {
     const typeField = get(r, "type");
     if (typeField) notesParts.push("场地类型: " + (PBT_TYPE_LABEL[typeField] || typeField));
     if (isTourn) {
-      const player = get(r, "player"), place = get(r, "place"), itm = get(r, "itm");
+      const player = get(r, "player");
       const bits = [];
       if (gameRaw) bits.push(gameRaw);
       if (player && player !== "0") bits.push(player + "人参赛");
-      if (place && place !== "0") bits.push("第" + place + "名");
-      if (itm && itm !== "0") bits.push("进钱圈");
+      if (place > 0) bits.push("第" + place + "名");
       if (bits.length) notesParts.push(bits.join(" · "));
     } else if (gameRaw && gameRaw !== stakes) {
       notesParts.push("原始记录: " + gameRaw);
@@ -767,6 +809,7 @@ function pbtRowsToSessions(rows) {
       location: get(r, "location").trim(),
       startTime, endTime,
       buyIn, rebuy, cashOut, expenses,
+      bigBlind, place, bounties,
       notes: notesParts.join("\n"),
     };
   });
