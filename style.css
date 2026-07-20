@@ -175,6 +175,17 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
 }
 .chart-tooltip.show { opacity: 1; }
 .chart-wrap { position: relative; }
+.chart-selected-info {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.chart-selected-info .good { color: var(--good-text); font-weight: 600; }
+.chart-selected-info .bad { color: var(--critical); font-weight: 600; }
 
 .empty-state {
   text-align: center;

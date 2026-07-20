@@ -370,11 +370,10 @@ function drawBarChart(wrap, points) {
     <div class="chart-axis-labels" style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);padding:2px 4px 0">
       <span>${points[0].label}</span><span>${points[points.length - 1].label}</span>
     </div>
+    <div class="chart-selected-info" id="barSelectedInfo">点击柱状图查看单局详情</div>
   `;
-  const tooltip = document.createElement("div");
-  tooltip.className = "chart-tooltip";
-  wrap.appendChild(tooltip);
   const svgEl = wrap.querySelector("svg");
+  const infoEl = wrap.querySelector("#barSelectedInfo");
   const centers = points.map((p, i) => PAD.l + slot * i + slot / 2);
   const barEls = [...svgEl.querySelectorAll("path[data-idx]")];
   let selectedIdx = null;
@@ -386,17 +385,9 @@ function drawBarChart(wrap, points) {
     centers.forEach((cx, i) => { const dist = Math.abs(cx - relX); if (dist < bestD) { bestD = dist; best = i; } });
     return best;
   }
-  function showTooltipFor(idx) {
+  function showInfoFor(idx) {
     const p = points[idx];
-    const cx = centers[idx], cy = yAt(p.value);
-    tooltip.style.left = (cx / VB_W) * 100 + "%";
-    tooltip.style.top = (cy / VB_H) * 100 + "%";
-    tooltip.textContent = `${p.fullLabel}  ${moneySigned(p.value)}`;
-    tooltip.classList.add("show");
-  }
-  function handleMove(evt) {
-    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-    showTooltipFor(nearestIdx(clientX));
+    infoEl.innerHTML = `${p.fullLabel} <span class="${p.value >= 0 ? "good" : "bad"}">${moneySigned(p.value)}</span>`;
   }
   function handleTap(evt) {
     const clientX = evt.changedTouches ? evt.changedTouches[0].clientX : evt.clientX;
@@ -404,12 +395,9 @@ function drawBarChart(wrap, points) {
     if (selectedIdx != null && barEls[selectedIdx]) barEls[selectedIdx].setAttribute("fill", barColors[selectedIdx]);
     selectedIdx = idx;
     barEls[idx].setAttribute("fill", "var(--text-primary)");
-    showTooltipFor(idx);
+    showInfoFor(idx);
   }
-  function handleLeave() { tooltip.classList.remove("show"); }
-  svgEl.addEventListener("pointermove", handleMove);
   svgEl.addEventListener("click", handleTap);
-  svgEl.addEventListener("pointerleave", handleLeave);
 }
 
 // ---------- views ----------
