@@ -399,7 +399,7 @@ function drawBarChart(wrap, points) {
     showTooltipFor(nearestIdx(clientX));
   }
   function handleTap(evt) {
-    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+    const clientX = evt.changedTouches ? evt.changedTouches[0].clientX : evt.clientX;
     const idx = nearestIdx(clientX);
     if (selectedIdx != null && barEls[selectedIdx]) barEls[selectedIdx].setAttribute("fill", barColors[selectedIdx]);
     selectedIdx = idx;
@@ -408,7 +408,7 @@ function drawBarChart(wrap, points) {
   }
   function handleLeave() { tooltip.classList.remove("show"); }
   svgEl.addEventListener("pointermove", handleMove);
-  svgEl.addEventListener("pointerdown", handleTap);
+  svgEl.addEventListener("click", handleTap);
   svgEl.addEventListener("pointerleave", handleLeave);
 }
 
