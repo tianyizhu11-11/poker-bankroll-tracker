@@ -258,6 +258,29 @@ function fmtDateFull(d) {
   const [y, m, day] = d.split("-");
   return `${y}年${m}月${day}日`;
 }
+const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+function fmtDateWeekday(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  return `${WEEKDAYS[d.getDay()]}, ${d.getMonth() + 1}月${d.getDate()}, ${d.getFullYear()}`;
+}
+
+function buildDonutSVG(segments, bigText, smallText) {
+  const total = segments.reduce((a, s) => a + s.value, 0) || 1;
+  const r = 40, circ = 2 * Math.PI * r;
+  let offset = 0;
+  const arcs = segments.map(seg => {
+    const len = (seg.value / total) * circ;
+    const arc = `<circle cx="50" cy="50" r="${r}" fill="none" stroke="${seg.color}" stroke-width="14" stroke-dasharray="${len.toFixed(2)} ${circ.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 50 50)"/>`;
+    offset += len;
+    return arc;
+  }).join("");
+  return `<svg viewBox="0 0 100 100" width="128" height="128">
+    <circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--grid)" stroke-width="14"/>
+    ${arcs}
+    <text x="50" y="47" text-anchor="middle" font-size="19" font-weight="700" fill="var(--text-primary)">${bigText}</text>
+    <text x="50" y="61" text-anchor="middle" font-size="9" fill="var(--text-muted)">${smallText}</text>
+  </svg>`;
+}
 
 // ---------- charts ----------
 function niceRange(values) {
@@ -643,7 +666,7 @@ function renderLocations() {
     return;
   }
   view.innerHTML = rows.map(r => `
-    <div class="loc-card">
+    <div class="loc-card" data-name="${escapeHtml(r.name)}">
       <div class="loc-top">
         <div style="min-width:0">
           <div class="loc-name">${escapeHtml(r.name)}</div>
@@ -653,6 +676,118 @@ function renderLocations() {
       </div>
       <div class="loc-detail">${r.count}局 · ${fmtHours(r.hours)} · ${r.hourly == null ? "--" : moneySigned(r.hourly) + "/h"} · <span class="${r.winRate >= 50 ? "good" : ""}">${r.winRate.toFixed(0)}% 获胜</span></div>
     </div>`).join("");
+  view.querySelectorAll(".loc-card").forEach(card => {
+    card.addEventListener("click", () => openLocationDetail(card.dataset.name));
+  });
+}
+
+function computeLocationDetail(name) {
+  const list = sessions.filter(s => ((s.location || "未知地点").trim() || "未知地点") === name);
+  const venueType = extractVenueType(list);
+  const cashList = list.filter(s => !isTournamentType(s.gameType));
+  const tournList = list.filter(s => isTournamentType(s.gameType));
+  const wins = list.filter(s => computeMetrics(s).profit > 0).length;
+  const losses = list.length - wins;
+
+  const asc = [...list].sort((a, b) => sortKey(a) < sortKey(b) ? -1 : 1);
+  let cum = 0;
+  const curvePoints = [{ value: 0, label: fmtDate(asc[0].date), fullLabel: "起点" }];
+  asc.forEach(s => {
+    cum += computeMetrics(s).profit;
+    curvePoints.push({ value: cum, label: fmtDate(s.date), fullLabel: fmtDateFull(s.date) });
+  });
+
+  let best = list[0], bestProfit = -Infinity;
+  list.forEach(s => { const p = computeMetrics(s).profit; if (p > bestProfit) { bestProfit = p; best = s; } });
+
+  const desc = [...list].sort((a, b) => sortKey(a) > sortKey(b) ? -1 : 1);
+  const byYear = new Map();
+  desc.forEach(s => {
+    const y = s.date.slice(0, 4);
+    if (!byYear.has(y)) byYear.set(y, []);
+    byYear.get(y).push(s);
+  });
+
+  return {
+    name, venueType, count: list.length,
+    cashCount: cashList.length, tournCount: tournList.length,
+    wins, losses, winRate: list.length ? (wins / list.length) * 100 : 0,
+    cashSummary: summarizeGroup(cashList), tournSummary: summarizeGroup(tournList), totalSummary: summarizeGroup(list),
+    curvePoints, best, byYear,
+  };
+}
+
+function renderLocSessionRow(s) {
+  const m = computeMetrics(s);
+  const title = [s.gameType, s.stakes].filter(Boolean).join(" · ") || "未命名场次";
+  return `
+    <div class="session-row" style="cursor:default">
+      <div class="session-main">
+        <div class="title">${escapeHtml(title)}</div>
+        <div class="meta">${escapeHtml(s.location || "")}</div>
+      </div>
+      <div class="session-side">
+        <div class="profit ${m.profit >= 0 ? "good" : "bad"}">${moneySigned(m.profit)}</div>
+        <div class="hourly">${fmtDateWeekday(s.date)}</div>
+      </div>
+    </div>`;
+}
+
+function openLocationDetail(name) {
+  const d = computeLocationDetail(name);
+  const typeRows = [];
+  if (d.cashCount > 0) typeRows.push({ label: "现金游戏", ...d.cashSummary });
+  if (d.tournCount > 0) typeRows.push({ label: "锦标赛", ...d.tournSummary });
+
+  sheetEl.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h2 style="margin:0">位置信息</h2>
+      <button id="btn-close-loc" style="background:none;border:none;font-size:24px;color:var(--series-1);line-height:1;padding:4px">&times;</button>
+    </div>
+    <div style="text-align:center;margin-bottom:16px">
+      <div style="font-size:21px;font-weight:700">${escapeHtml(d.name)}</div>
+      ${d.venueType ? `<div style="font-size:13px;color:var(--text-muted);margin-top:2px">${escapeHtml(d.venueType)}</div>` : ""}
+    </div>
+    <div class="chart-wrap" id="locChartWrap" style="margin-bottom:20px"></div>
+    <div style="display:flex;gap:12px;justify-content:center;margin-bottom:20px;flex-wrap:wrap">
+      <div style="text-align:center">
+        ${buildDonutSVG([{ value: d.cashCount, color: "var(--series-1)" }, { value: d.tournCount, color: "var(--series-4)" }], String(d.count), "局")}
+        <div style="font-size:12px;margin-top:8px;text-align:left">
+          <div><span class="legend-dot" style="background:var(--series-1)"></span>现金游戏 (${d.cashCount})</div>
+          <div><span class="legend-dot" style="background:var(--series-4)"></span>锦标赛 (${d.tournCount})</div>
+        </div>
+      </div>
+      <div style="text-align:center">
+        ${buildDonutSVG([{ value: d.wins, color: "var(--good)" }, { value: d.losses, color: "var(--critical)" }], d.winRate.toFixed(0) + "%", "获胜")}
+        <div style="font-size:12px;margin-top:8px;text-align:left">
+          <div><span class="legend-dot" style="background:var(--good)"></span>获胜 (${d.wins})</div>
+          <div><span class="legend-dot" style="background:var(--critical)"></span>失去 (${d.losses})</div>
+        </div>
+      </div>
+    </div>
+    <div class="chart-card" style="margin-bottom:18px">
+      <div class="dt-row dt-head" style="grid-template-columns:1.3fr 1fr 1fr"><div class="dt-label">类型</div><div class="dt-val">ROI</div><div class="dt-val">利润</div></div>
+      ${typeRows.map(r => `
+        <div class="dt-row" style="grid-template-columns:1.3fr 1fr 1fr">
+          <div class="dt-label">${r.label}</div>
+          <div class="dt-val ${(r.roi ?? 0) >= 0 ? "good" : "bad"}">${pct(r.roi)}</div>
+          <div class="dt-val ${r.profit >= 0 ? "good" : "bad"}">${moneySigned(r.profit)}</div>
+        </div>`).join("")}
+      <div class="dt-row" style="grid-template-columns:1.3fr 1fr 1fr">
+        <div class="dt-label">总计</div><div class="dt-val"></div>
+        <div class="dt-val ${d.totalSummary.profit >= 0 ? "good" : "bad"}">${moneySigned(d.totalSummary.profit)}</div>
+      </div>
+    </div>
+    <div class="section-title" style="text-align:center">最佳对局</div>
+    ${renderLocSessionRow(d.best)}
+    ${[...d.byYear.entries()].map(([year, list]) => `
+      <div class="section-title" style="text-align:center;margin-top:18px">${year}</div>
+      ${list.map(s => renderLocSessionRow(s)).join("")}
+    `).join("")}
+  `;
+  overlay.classList.remove("hidden");
+  drawLineChart(document.getElementById("locChartWrap"), d.curvePoints);
+  document.getElementById("btn-close-loc").addEventListener("click", closeSheet);
 }
 
 function renderSessions() {
