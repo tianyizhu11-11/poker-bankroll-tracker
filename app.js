@@ -422,8 +422,8 @@ function renderOverview() {
 
     ${renderTypeSummaryHTML(computeTypeBreakdown())}
     ${renderSessionStatsHTML(computeTypeBreakdown())}
-    ${renderTournamentDetailHTML(computeTournamentDetail())}
     ${renderGameBreakdownHTML(computeGameBreakdown())}
+    ${renderTournamentDetailHTML(computeTournamentDetail())}
   `;
   drawLineChart(document.getElementById("lineChartWrap"), linePoints);
   drawBarChart(document.getElementById("barChartWrap"), barPoints);
