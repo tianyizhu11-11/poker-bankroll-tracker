@@ -342,6 +342,7 @@ function drawBarChart(wrap, points) {
   const barW = Math.max(3, Math.min(20, slot * 0.6));
 
   let bars = "";
+  const barColors = [];
   points.forEach((p, i) => {
     const cx = PAD.l + slot * i + slot / 2;
     const x = cx - barW / 2;
@@ -351,6 +352,7 @@ function drawBarChart(wrap, points) {
     const h = Math.max(bottom - top, 1.5);
     const r = Math.min(3, barW / 2, h / 2);
     const color = positive ? "var(--good)" : "var(--critical)";
+    barColors.push(color);
     let d;
     if (positive) {
       d = `M ${x},${bottom} L ${x},${(top + r).toFixed(2)} Q ${x},${top} ${(x + r).toFixed(2)},${top} L ${(x + barW - r).toFixed(2)},${top} Q ${(x + barW).toFixed(2)},${top} ${(x + barW).toFixed(2)},${(top + r).toFixed(2)} L ${(x + barW).toFixed(2)},${bottom} Z`;
@@ -374,6 +376,8 @@ function drawBarChart(wrap, points) {
   wrap.appendChild(tooltip);
   const svgEl = wrap.querySelector("svg");
   const centers = points.map((p, i) => PAD.l + slot * i + slot / 2);
+  const barEls = [...svgEl.querySelectorAll("path[data-idx]")];
+  let selectedIdx = null;
 
   function nearestIdx(clientX) {
     const rect = svgEl.getBoundingClientRect();
@@ -382,9 +386,7 @@ function drawBarChart(wrap, points) {
     centers.forEach((cx, i) => { const dist = Math.abs(cx - relX); if (dist < bestD) { bestD = dist; best = i; } });
     return best;
   }
-  function handleMove(evt) {
-    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-    const idx = nearestIdx(clientX);
+  function showTooltipFor(idx) {
     const p = points[idx];
     const cx = centers[idx], cy = yAt(p.value);
     tooltip.style.left = (cx / VB_W) * 100 + "%";
@@ -392,9 +394,21 @@ function drawBarChart(wrap, points) {
     tooltip.textContent = `${p.fullLabel}  ${moneySigned(p.value)}`;
     tooltip.classList.add("show");
   }
+  function handleMove(evt) {
+    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+    showTooltipFor(nearestIdx(clientX));
+  }
+  function handleTap(evt) {
+    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+    const idx = nearestIdx(clientX);
+    if (selectedIdx != null && barEls[selectedIdx]) barEls[selectedIdx].setAttribute("fill", barColors[selectedIdx]);
+    selectedIdx = idx;
+    barEls[idx].setAttribute("fill", "var(--text-primary)");
+    showTooltipFor(idx);
+  }
   function handleLeave() { tooltip.classList.remove("show"); }
   svgEl.addEventListener("pointermove", handleMove);
-  svgEl.addEventListener("pointerdown", handleMove);
+  svgEl.addEventListener("pointerdown", handleTap);
   svgEl.addEventListener("pointerleave", handleLeave);
 }
 
