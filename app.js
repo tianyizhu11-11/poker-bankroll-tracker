@@ -736,7 +736,7 @@ function renderLocSessionRow(s) {
   const m = computeMetrics(s);
   const title = [s.gameType, s.game, s.stakes].filter(Boolean).join(" · ") || "未命名场次";
   return `
-    <div class="session-row" style="cursor:default">
+    <div class="session-row" data-loc-session-id="${s.id}">
       <div class="session-main">
         <div class="title" style="display:flex;align-items:center">${sessionIconHTML(s)}${escapeHtml(title)}</div>
         <div class="meta">${escapeHtml(s.location || "")}</div>
@@ -820,6 +820,9 @@ function openLocationDetail(name) {
   showOverlay();
   drawLineChart(document.getElementById("locChartWrap"), d.curvePoints);
   document.getElementById("btn-close-loc").addEventListener("click", closeSheet);
+  sheetEl.querySelectorAll("[data-loc-session-id]").forEach(row => {
+    row.addEventListener("click", () => openSheet(row.dataset.locSessionId));
+  });
 }
 
 function renderSessions() {
