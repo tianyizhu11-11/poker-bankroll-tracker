@@ -12,6 +12,7 @@ let activeTab = "overview";
 let editingId = null;
 let lastDeleted = null;
 let toastTimer = null;
+let chartsDurationMetric = "profit";
 
 // ---------- storage ----------
 function loadSessions() {
@@ -255,6 +256,23 @@ function computeYearBreakdown() {
   return [...map.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([label, value]) => ({ label, value }));
 }
 
+function computeDurationBuckets(list) {
+  const buckets = new Map();
+  list.forEach(s => {
+    const m = computeMetrics(s);
+    if (!s.startTime || !s.endTime) return;
+    let idx = Math.floor(m.durationHr);
+    if (idx > 10) idx = 10;
+    if (idx < 0) idx = 0;
+    if (!buckets.has(idx)) buckets.set(idx, []);
+    buckets.get(idx).push(s);
+  });
+  return [...buckets.entries()].sort((a, b) => a[0] - b[0]).map(([idx, list]) => ({
+    label: idx === 10 ? "10h+" : `${idx}-${idx + 1}h`,
+    ...summarizeGroup(list),
+  }));
+}
+
 function computeLocationBreakdown() {
   const map = new Map();
   sessions.forEach(s => {
@@ -343,6 +361,54 @@ function buildGroupBarHTML(items) {
     </div>`;
 }
 
+const METRIC_OPTIONS = [
+  { key: "profit", label: "利润", icon: "$" },
+  { key: "hourly", label: "HOURLY", icon: "⏱" },
+  { key: "roi", label: "ROI", icon: "%" },
+  { key: "count", label: "局数", icon: "#" },
+];
+function metricValue(row, metric) {
+  if (metric === "hourly") return row.hourly ?? 0;
+  if (metric === "roi") return row.roi ?? 0;
+  if (metric === "count") return row.count;
+  return row.profit;
+}
+function metricFormat(v, metric) {
+  if (metric === "count") return String(v);
+  if (metric === "roi") return pct(v);
+  if (metric === "hourly") return moneySigned(v) + "/h";
+  return moneySigned(v);
+}
+function renderMetricToggleHTML() {
+  return `
+    <div class="metric-toggle">
+      ${METRIC_OPTIONS.map(o => `<button class="metric-toggle-btn${chartsDurationMetric === o.key ? " active" : ""}" data-metric="${o.key}">${o.icon} ${o.label}</button>`).join("")}
+    </div>`;
+}
+function renderDurationSectionHTML(title, rows, metric) {
+  if (!rows.length) return "";
+  const maxAbs = Math.max(...rows.map(r => Math.abs(metricValue(r, metric))), 1);
+  return `
+    <div class="chart-card">
+      <h3 style="text-align:center">${title}</h3>
+      ${rows.map(r => {
+        const v = metricValue(r, metric);
+        const pctW = Math.min(100, (Math.abs(v) / maxAbs) * 100);
+        const isCount = metric === "count";
+        const barColor = isCount ? "var(--series-1)" : (v >= 0 ? "var(--good)" : "var(--critical)");
+        const valColor = isCount ? "var(--text-primary)" : (v >= 0 ? "var(--good-text)" : "var(--critical)");
+        return `
+          <div class="dur-row">
+            <div class="dur-top">
+              <span class="dur-label">${r.label} · ${r.count}对局</span>
+              <span class="dur-value" style="color:${valColor}">${metricFormat(v, metric)}</span>
+            </div>
+            <div class="dur-track"><div class="dur-fill" style="width:${pctW.toFixed(1)}%;background:${barColor}"></div></div>
+          </div>`;
+      }).join("")}
+    </div>`;
+}
+
 function renderCharts() {
   if (!sessions.length) {
     view.innerHTML = `
@@ -353,6 +419,8 @@ function renderCharts() {
       </div>`;
     return;
   }
+  const cashList = sessions.filter(s => !isTournamentType(s.gameType));
+  const tournList = sessions.filter(s => isTournamentType(s.gameType));
   view.innerHTML = `
     <div class="chart-card">
       <h3 style="text-align:center">工作日</h3>
@@ -366,7 +434,13 @@ function renderCharts() {
       <h3 style="text-align:center">年份</h3>
       ${buildGroupBarHTML(computeYearBreakdown())}
     </div>
+    ${renderDurationSectionHTML("CG 会话时长", computeDurationBuckets(cashList), chartsDurationMetric)}
+    ${renderDurationSectionHTML("锦标赛 会话时长", computeDurationBuckets(tournList), chartsDurationMetric)}
+    ${renderMetricToggleHTML()}
   `;
+  view.querySelectorAll(".metric-toggle-btn").forEach(btn => {
+    btn.addEventListener("click", () => { chartsDurationMetric = btn.dataset.metric; renderCharts(); });
+  });
 }
 
 // ---------- charts ----------

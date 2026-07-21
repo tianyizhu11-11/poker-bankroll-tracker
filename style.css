@@ -301,6 +301,36 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
   margin-right: 6px;
 }
 
+/* ---- duration buckets & metric toggle ---- */
+.dur-row { margin-bottom: 12px; }
+.dur-row:last-child { margin-bottom: 0; }
+.dur-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; margin-bottom: 5px; }
+.dur-label { color: var(--text-secondary); }
+.dur-value { font-weight: 700; font-variant-numeric: tabular-nums; }
+.dur-track { height: 8px; background: var(--grid); border-radius: 4px; overflow: hidden; }
+.dur-fill { height: 100%; border-radius: 4px; }
+
+.metric-toggle {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.metric-toggle-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  border-right: 1px solid var(--border);
+  padding: 12px 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: inherit;
+}
+.metric-toggle-btn:last-child { border-right: none; }
+.metric-toggle-btn.active { color: var(--series-1); font-weight: 700; }
+
 /* ---- month compare & trend ---- */
 .compare-grid {
   display: grid;
