@@ -817,7 +817,7 @@ function openLocationDetail(name) {
       ${list.map(s => renderLocSessionRow(s)).join("")}
     `).join("")}
   `;
-  overlay.classList.remove("hidden");
+  showOverlay();
   drawLineChart(document.getElementById("locChartWrap"), d.curvePoints);
   document.getElementById("btn-close-loc").addEventListener("click", closeSheet);
 }
@@ -954,7 +954,7 @@ function openSheet(id) {
     </div>
     ${id ? '<div class="btn-row"><button class="btn btn-danger" id="btn-delete">删除这条记录</button></div>' : ""}
   `;
-  overlay.classList.remove("hidden");
+  showOverlay();
 
   const fields = ["date", "gameType", "stakes", "location", "start", "end", "buyIn", "rebuy", "cashOut", "expenses", "notes"];
   function readForm() {
@@ -1007,7 +1007,16 @@ function openSheet(id) {
     }
   });
 }
-function closeSheet() { overlay.classList.add("hidden"); sheetEl.innerHTML = ""; editingId = null; }
+function showOverlay() {
+  overlay.classList.remove("hidden");
+  document.body.classList.add("modal-open");
+}
+function closeSheet() {
+  overlay.classList.add("hidden");
+  sheetEl.innerHTML = "";
+  editingId = null;
+  document.body.classList.remove("modal-open");
+}
 overlay.addEventListener("click", e => { if (e.target === overlay) closeSheet(); });
 
 // ---------- toast ----------
@@ -1167,7 +1176,7 @@ function confirmImport(imported) {
       <button class="btn btn-primary" id="btn-import-confirm">确认替换</button>
     </div>
   `;
-  overlay.classList.remove("hidden");
+  showOverlay();
   document.getElementById("btn-import-cancel").addEventListener("click", closeSheet);
   document.getElementById("btn-import-confirm").addEventListener("click", () => {
     sessions = imported;
