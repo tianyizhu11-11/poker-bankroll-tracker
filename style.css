@@ -63,8 +63,9 @@ html, body {
   color: var(--text-primary);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
-  overscroll-behavior-y: none;
+  overscroll-behavior: none;
   overflow-x: hidden;
+  touch-action: pan-y;
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
@@ -376,6 +377,8 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
   display: flex;
   align-items: flex-end;
   z-index: 20;
+  touch-action: pan-y;
+  overscroll-behavior: none;
 }
 .overlay.hidden { display: none; }
 .sheet {
@@ -383,7 +386,9 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
   width: 100%;
   max-height: 92dvh;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
+  touch-action: pan-y;
   border-radius: 18px 18px 0 0;
   padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
 }
