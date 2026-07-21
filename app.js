@@ -892,7 +892,7 @@ function openSheet(id) {
     <h2>${id ? "编辑场次" : "记一局"}</h2>
     <div class="field">
       <label>日期</label>
-      <input type="date" id="f-date" value="${s.date}" />
+      <input type="text" inputmode="numeric" id="f-date" value="${s.date}" placeholder="YYYY-MM-DD" />
     </div>
     <div class="row2">
       <div class="field">
@@ -912,11 +912,11 @@ function openSheet(id) {
     <div class="row2">
       <div class="field">
         <label>开始时间</label>
-        <input type="time" id="f-start" value="${s.startTime || ""}" />
+        <input type="text" inputmode="numeric" id="f-start" value="${s.startTime || ""}" placeholder="HH:MM" />
       </div>
       <div class="field">
         <label>结束时间</label>
-        <input type="time" id="f-end" value="${s.endTime || ""}" />
+        <input type="text" inputmode="numeric" id="f-end" value="${s.endTime || ""}" placeholder="HH:MM" />
       </div>
     </div>
     <div class="row3">
