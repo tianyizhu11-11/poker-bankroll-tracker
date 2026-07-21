@@ -882,6 +882,24 @@ function todayStr() {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
+function timeSelectHTML(idPrefix, value) {
+  const [h, m] = (value || "").split(":");
+  const hourOpts = ['<option value="">--</option>'].concat(
+    Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"))
+      .map(hh => `<option value="${hh}"${hh === h ? " selected" : ""}>${hh}</option>`)
+  ).join("");
+  const minOpts = ['<option value="">--</option>'].concat(
+    Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"))
+      .map(mm => `<option value="${mm}"${mm === m ? " selected" : ""}>${mm}</option>`)
+  ).join("");
+  return `
+    <div class="time-select-row">
+      <select id="${idPrefix}-h">${hourOpts}</select>
+      <span class="time-colon">:</span>
+      <select id="${idPrefix}-m">${minOpts}</select>
+    </div>`;
+}
+
 function openSheet(id) {
   editingId = id;
   const s = id ? sessions.find(x => x.id === id) : {
@@ -912,11 +930,11 @@ function openSheet(id) {
     <div class="row2">
       <div class="field">
         <label>开始时间</label>
-        <input type="text" inputmode="numeric" id="f-start" value="${s.startTime || ""}" placeholder="HH:MM" />
+        ${timeSelectHTML("f-start", s.startTime)}
       </div>
       <div class="field">
         <label>结束时间</label>
-        <input type="text" inputmode="numeric" id="f-end" value="${s.endTime || ""}" placeholder="HH:MM" />
+        ${timeSelectHTML("f-end", s.endTime)}
       </div>
     </div>
     <div class="row3">
@@ -956,7 +974,11 @@ function openSheet(id) {
   `;
   showOverlay();
 
-  const fields = ["date", "gameType", "stakes", "location", "start", "end", "buyIn", "rebuy", "cashOut", "expenses", "notes"];
+  function combineTime(prefix) {
+    const h = document.getElementById(prefix + "-h").value;
+    const m = document.getElementById(prefix + "-m").value;
+    return (h && m) ? h + ":" + m : "";
+  }
   function readForm() {
     return {
       id: s.id,
@@ -964,8 +986,8 @@ function openSheet(id) {
       gameType: document.getElementById("f-gameType").value.trim(),
       stakes: document.getElementById("f-stakes").value.trim(),
       location: document.getElementById("f-location").value.trim(),
-      startTime: document.getElementById("f-start").value,
-      endTime: document.getElementById("f-end").value,
+      startTime: combineTime("f-start"),
+      endTime: combineTime("f-end"),
       buyIn: document.getElementById("f-buyIn").value,
       rebuy: document.getElementById("f-rebuy").value,
       cashOut: document.getElementById("f-cashOut").value,
@@ -980,8 +1002,9 @@ function openSheet(id) {
     ph.textContent = m.hourly == null ? "--" : moneySigned(m.hourly) + "/h"; ph.className = "v " + (m.hourly >= 0 ? "good" : "bad");
     pr.textContent = pct(m.roi); pr.className = "v " + ((m.roi ?? 0) >= 0 ? "good" : "bad");
   }
-  ["f-buyIn", "f-rebuy", "f-cashOut", "f-expenses", "f-start", "f-end", "f-date"].forEach(id => {
+  ["f-buyIn", "f-rebuy", "f-cashOut", "f-expenses", "f-start-h", "f-start-m", "f-end-h", "f-end-m", "f-date"].forEach(id => {
     document.getElementById(id).addEventListener("input", updatePreview);
+    document.getElementById(id).addEventListener("change", updatePreview);
   });
   updatePreview();
 

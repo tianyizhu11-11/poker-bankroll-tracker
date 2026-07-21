@@ -426,6 +426,32 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
 .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; min-width: 0; overflow: hidden; }
 .row2 > *, .row3 > * { min-width: 0; max-width: 100%; overflow: hidden; }
 
+.time-select-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+.time-select-row select {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  color: var(--text-primary);
+  font-family: inherit;
+  text-align: center;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.time-colon { color: var(--text-muted); font-weight: 700; flex: none; }
+
 .computed-preview {
   background: var(--surface);
   border: 1px solid var(--border);
