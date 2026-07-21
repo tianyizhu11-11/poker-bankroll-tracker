@@ -365,7 +365,6 @@ const METRIC_OPTIONS = [
   { key: "profit", label: "利润", icon: "$" },
   { key: "hourly", label: "HOURLY", icon: "⏱" },
   { key: "roi", label: "ROI", icon: "%" },
-  { key: "count", label: "局数", icon: "#" },
 ];
 function metricValue(row, metric) {
   if (metric === "hourly") return row.hourly ?? 0;
