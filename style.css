@@ -412,14 +412,11 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 12px;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--text-primary);
   font-family: inherit;
   box-sizing: border-box;
   overflow: hidden;
-}
-.field input[type="date"], .field input[type="time"] {
-  font-size: 14px;
 }
 .field input:focus, .field select:focus, .field textarea:focus {
   outline: 2px solid var(--series-1);
