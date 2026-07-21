@@ -313,7 +313,7 @@ function buildDonutSVG(segments, bigText, smallText) {
 }
 
 function buildGroupBarHTML(items) {
-  const W = 300, H = 190, padSide = 6, padTop = 12, padBottom = 8;
+  const W = 300, H = 190, padSide = 6, padTop = 24, padBottom = 24;
   const innerW = W - padSide * 2, innerH = H - padTop - padBottom;
   const maxAbs = Math.max(...items.map(it => Math.abs(it.value)), 1);
   const zeroY = padTop + innerH / 2;
@@ -332,8 +332,8 @@ function buildGroupBarHTML(items) {
     const color = positive ? "var(--good)" : "var(--critical)";
     const r = Math.min(4, barW / 2, h / 2);
     bars += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${barW.toFixed(2)}" height="${h.toFixed(2)}" rx="${r.toFixed(2)}" fill="${color}"/>`;
-    const labelY = positive ? zeroY - h + 8 : zeroY + h - 8;
-    bars += `<text x="${cx.toFixed(2)}" y="${labelY.toFixed(2)}" font-size="9" font-weight="600" fill="#fff" text-anchor="middle" transform="rotate(-90 ${cx.toFixed(2)} ${labelY.toFixed(2)})">${money(it.value)}</text>`;
+    const labelY = positive ? y - 6 : y + h + 6;
+    bars += `<text x="${cx.toFixed(2)}" y="${labelY.toFixed(2)}" font-size="9" font-weight="600" fill="var(--text-primary)" text-anchor="middle" transform="rotate(-90 ${cx.toFixed(2)} ${labelY.toFixed(2)})">${money(it.value)}</text>`;
   });
 
   return `
