@@ -1,13 +1,13 @@
 :root {
   color-scheme: light;
-  --page: #f9f9f7;
-  --surface: #fcfcfb;
-  --surface-2: #f2f1ee;
+  --page: #e9eef4;
+  --surface: #ffffff;
+  --surface-2: #eef2f7;
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
   --text-muted: #898781;
-  --grid: #e1e0d9;
-  --baseline: #c3c2b7;
+  --grid: #dde3ea;
+  --baseline: #b9c2cc;
   --border: rgba(11,11,11,0.10);
   --series-1: #2a78d6;
   --series-4: #eda100;
