@@ -331,6 +331,21 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
 .metric-toggle-btn:last-child { border-right: none; }
 .metric-toggle-btn.active { color: var(--series-1); font-weight: 700; }
 
+.trend-legend { display: flex; justify-content: center; gap: 14px; margin-top: 12px; flex-wrap: wrap; }
+.trend-legend-btn {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+.trend-legend-btn.off { color: var(--text-muted); font-weight: 500; }
+.trend-legend-btn .legend-dot { margin-right: 5px; }
+
 /* ---- month compare & trend ---- */
 .compare-grid {
   display: grid;

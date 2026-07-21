@@ -13,6 +13,8 @@ let editingId = null;
 let lastDeleted = null;
 let toastTimer = null;
 let chartsDurationMetric = "profit";
+let trendsRange = "max";
+let trendsVisible = { cash: true, tourn: true, total: true };
 
 // ---------- storage ----------
 function loadSessions() {
@@ -147,6 +149,51 @@ function computeTrendWindow(days) {
   const list = sessions.filter(s => s.date && s.date >= startStr).sort((a, b) => sortKey(a) < sortKey(b) ? -1 : 1);
   if (!list.length) return null;
   return { list, agg: aggregate(list) };
+}
+
+const TREND_RANGES = [
+  { key: "1w", label: "1周" },
+  { key: "1m", label: "1月" },
+  { key: "3m", label: "3月" },
+  { key: "ytd", label: "YTD" },
+  { key: "1y", label: "1年" },
+  { key: "3y", label: "3年" },
+  { key: "max", label: "最大" },
+];
+const TREND_SERIES_META = [
+  { key: "cash", label: "现金游戏", color: "var(--series-1)" },
+  { key: "tourn", label: "锦标赛", color: "var(--series-4)" },
+  { key: "total", label: "总计", color: "var(--text-primary)" },
+];
+
+function computeTrendSeries(range) {
+  const list = sortedAsc();
+  if (!list.length) return null;
+  let totalCum = 0, cashCum = 0, tournCum = 0;
+  const points = list.map(s => {
+    const m = computeMetrics(s);
+    if (isTournamentType(s.gameType)) tournCum += m.profit; else cashCum += m.profit;
+    totalCum += m.profit;
+    return { date: s.date, label: s.date, total: totalCum, cash: cashCum, tourn: tournCum };
+  });
+  const first = points[0];
+  const full = [{ date: first.date, label: first.label, total: 0, cash: 0, tourn: 0 }, ...points];
+
+  let cutoff = null;
+  const now = new Date();
+  if (range === "1w") cutoff = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+  else if (range === "1m") cutoff = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
+  else if (range === "3m") cutoff = new Date(now.getTime() - 90 * 24 * 3600 * 1000);
+  else if (range === "ytd") cutoff = new Date(now.getFullYear(), 0, 1);
+  else if (range === "1y") cutoff = new Date(now.getTime() - 365 * 24 * 3600 * 1000);
+  else if (range === "3y") cutoff = new Date(now.getTime() - 3 * 365 * 24 * 3600 * 1000);
+
+  if (!cutoff) return full;
+  const cutoffStr = cutoff.getFullYear() + "-" + String(cutoff.getMonth() + 1).padStart(2, "0") + "-" + String(cutoff.getDate()).padStart(2, "0");
+  let idx = full.findIndex(p => p.date >= cutoffStr);
+  if (idx === -1) idx = full.length - 1;
+  const sliced = full.slice(Math.max(0, idx - 1));
+  return sliced.length >= 2 ? sliced : full.slice(-2);
 }
 
 function isTournamentType(gameType) { return /锦标|tournament|mtt|sng|sit.?n.?go/i.test(gameType || ""); }
@@ -446,6 +493,44 @@ function renderCharts() {
   });
 }
 
+function renderTrends() {
+  if (!sessions.length) {
+    view.innerHTML = `
+      <div class="empty-state">
+        <div class="big">🃏</div>
+        <p>还没有任何记录</p>
+        <p>点右下角 + 记一局吧</p>
+      </div>`;
+    return;
+  }
+  const points = computeTrendSeries(trendsRange);
+  const series = TREND_SERIES_META.map(sr => ({ ...sr, visible: trendsVisible[sr.key] }));
+  view.innerHTML = `
+    <div class="chart-card">
+      <div id="trendChartWrap"></div>
+      <div class="metric-toggle" style="margin-top:12px">
+        ${TREND_RANGES.map(r => `<button class="metric-toggle-btn${trendsRange === r.key ? " active" : ""}" data-range="${r.key}">${r.label}</button>`).join("")}
+      </div>
+      <div class="trend-legend">
+        ${TREND_SERIES_META.map(sr => `
+          <button class="trend-legend-btn${trendsVisible[sr.key] ? "" : " off"}" data-series="${sr.key}">
+            <span class="legend-dot" style="background:${trendsVisible[sr.key] ? sr.color : "var(--text-muted)"}"></span>${sr.label}
+          </button>`).join("")}
+      </div>
+    </div>
+  `;
+  drawMultiLineChart(document.getElementById("trendChartWrap"), points, series);
+  view.querySelectorAll("[data-range]").forEach(btn => {
+    btn.addEventListener("click", () => { trendsRange = btn.dataset.range; renderTrends(); });
+  });
+  view.querySelectorAll("[data-series]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      trendsVisible[btn.dataset.series] = !trendsVisible[btn.dataset.series];
+      renderTrends();
+    });
+  });
+}
+
 // ---------- charts ----------
 function niceRange(values) {
   let min = Math.min(...values, 0), max = Math.max(...values, 0);
@@ -532,6 +617,55 @@ function drawLineChart(wrap, points) {
   svgEl.addEventListener("pointermove", handleMove);
   svgEl.addEventListener("pointerdown", handleMove);
   svgEl.addEventListener("pointerleave", handleLeave);
+}
+
+function drawMultiLineChart(wrap, points, series) {
+  wrap.innerHTML = "";
+  if (!points || points.length < 2) {
+    wrap.innerHTML = '<div class="empty-state" style="padding:24px"><p>数据不足,再记一局看曲线</p></div>';
+    return;
+  }
+  const shown = series.filter(sr => sr.visible);
+  const activeSeries = shown.length ? shown : series;
+  const allValues = points.flatMap(p => activeSeries.map(sr => p[sr.key]));
+  const [min, max] = niceRange(allValues);
+  const P = { l: 42, r: PAD.r, t: PAD.t, b: PAD.b };
+  const innerW = VB_W - P.l - P.r, innerH = VB_H - P.t - P.b;
+  const xAt = i => P.l + (i / (points.length - 1)) * innerW;
+  const yAt = v => P.t + innerH - ((v - min) / (max - min)) * innerH;
+
+  let grid = "";
+  let axisLabels = "";
+  [0, 0.5, 1].forEach(f => {
+    const y = P.t + innerH * f;
+    grid += `<line x1="${P.l}" y1="${y}" x2="${VB_W - P.r}" y2="${y}" stroke="var(--grid)" stroke-width="1"/>`;
+    const value = max - (max - min) * f;
+    axisLabels += `<text x="${P.l - 4}" y="${y.toFixed(2)}" font-size="9" fill="var(--text-muted)" text-anchor="end" dominant-baseline="middle">${moneyCompactSigned(value)}</text>`;
+  });
+  if (min < 0 && max > 0) {
+    const y0 = yAt(0);
+    grid += `<line x1="${P.l}" y1="${y0.toFixed(2)}" x2="${VB_W - P.r}" y2="${y0.toFixed(2)}" stroke="var(--baseline)" stroke-width="1"/>`;
+  }
+
+  let paths = "";
+  series.forEach(sr => {
+    if (!sr.visible) return;
+    const d = points.map((p, i) => (i === 0 ? "M" : "L") + xAt(i).toFixed(2) + "," + yAt(p[sr.key]).toFixed(2)).join(" ");
+    const lastX = xAt(points.length - 1), lastY = yAt(points[points.length - 1][sr.key]);
+    paths += `<path d="${d}" fill="none" stroke="${sr.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    paths += `<circle cx="${lastX.toFixed(2)}" cy="${lastY.toFixed(2)}" r="3.5" fill="${sr.color}" stroke="var(--surface)" stroke-width="2"/>`;
+  });
+
+  wrap.innerHTML = `
+    <svg class="chart" viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="none">
+      ${grid}
+      ${paths}
+      ${axisLabels}
+    </svg>
+    <div class="chart-axis-labels" style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);padding:2px 4px 0;margin-left:${((P.l / VB_W) * 100).toFixed(1)}%">
+      <span>${points[0].label}</span><span>${points[points.length - 1].label}</span>
+    </div>
+  `;
 }
 
 function drawBarChart(wrap, points) {
@@ -1030,6 +1164,7 @@ function renderView() {
   if (activeTab === "overview") renderOverview();
   else if (activeTab === "locations") renderLocations();
   else if (activeTab === "charts") renderCharts();
+  else if (activeTab === "trends") renderTrends();
   else renderSessions();
 }
 
