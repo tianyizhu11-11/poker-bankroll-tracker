@@ -396,7 +396,7 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
 }
 .sheet h2 { margin: 0 0 14px; font-size: 18px; }
 
-.field { margin-bottom: 12px; min-width: 0; }
+.field { margin-bottom: 12px; min-width: 0; max-width: 100%; overflow: hidden; }
 .field label {
   display: block;
   font-size: 12px;
@@ -404,6 +404,7 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
   margin-bottom: 5px;
 }
 .field input, .field select, .field textarea {
+  display: block;
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -415,14 +416,18 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
   color: var(--text-primary);
   font-family: inherit;
   box-sizing: border-box;
+  overflow: hidden;
+}
+.field input[type="date"], .field input[type="time"] {
+  font-size: 14px;
 }
 .field input:focus, .field select:focus, .field textarea:focus {
   outline: 2px solid var(--series-1);
   outline-offset: -1px;
 }
-.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-width: 0; }
-.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; min-width: 0; }
-.row2 > *, .row3 > * { min-width: 0; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-width: 0; overflow: hidden; }
+.row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; min-width: 0; overflow: hidden; }
+.row2 > *, .row3 > * { min-width: 0; max-width: 100%; overflow: hidden; }
 
 .computed-preview {
   background: var(--surface);
