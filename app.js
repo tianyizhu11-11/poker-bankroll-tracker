@@ -86,8 +86,8 @@ function toDate(dateStr, timeStr) {
   return new Date(dateStr + "T" + (timeStr || "00:00") + ":00");
 }
 function computeMetrics(s) {
-  const buyIn = +s.buyIn || 0, rebuy = +s.rebuy || 0, cashOut = +s.cashOut || 0, expenses = +s.expenses || 0;
-  const profit = cashOut - buyIn - rebuy - expenses;
+  const buyIn = +s.buyIn || 0, rebuy = +s.rebuy || 0, cashOut = +s.cashOut || 0;
+  const profit = cashOut - buyIn - rebuy;
   const atRisk = buyIn + rebuy;
   const roi = atRisk > 0 ? (profit / atRisk) * 100 : null;
   let durationMin = 0;
@@ -157,7 +157,7 @@ function summarizeGroup(list) {
     const m = computeMetrics(s);
     buyIn += +s.buyIn || 0;
     rebuy += +s.rebuy || 0;
-    cashOutRaw += (+s.cashOut || 0) - (+s.expenses || 0);
+    cashOutRaw += (+s.cashOut || 0);
     profit += m.profit;
     hours += m.durationHr;
     if (m.profit > 0) wins++;
@@ -189,7 +189,7 @@ function computeTournamentDetail() {
   let bounties = 0, itm = 0, runnerUp = 0, wins = 0, finalTable = 0;
   list.forEach(s => {
     bounties += +s.bounties || 0;
-    const rawCashout = (+s.cashOut || 0) - (+s.bounties || 0) - (+s.expenses || 0);
+    const rawCashout = (+s.cashOut || 0) - (+s.bounties || 0);
     if (rawCashout > 0) itm++;
     if (+s.place === 2) runnerUp++;
     if (+s.place === 1) wins++;
@@ -997,7 +997,7 @@ function openSessionDetail(id) {
   if (!s) return;
   const m = computeMetrics(s);
   const title = [s.gameType, s.game, s.stakes].filter(Boolean).join(" · ") || "未命名场次";
-  const cashOutRaw = (+s.cashOut || 0) - (+s.expenses || 0);
+  const cashOutRaw = +s.cashOut || 0;
 
   sheetEl.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
@@ -1265,7 +1265,7 @@ function pbtRowsToSessions(rows) {
     const rebuy = num(r, "rebuycosts") + num(r, "addoncosts") + num(r, "bountycosts");
     const expenses = num(r, "expenses");
     const bounties = num(r, "bounties");
-    const cashOut = num(r, "cashout") + bounties + expenses;
+    const cashOut = num(r, "cashout") + bounties;
     const bigBlind = bb;
     const place = num(r, "place");
     const players = num(r, "player");
