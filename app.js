@@ -68,7 +68,7 @@ async function syncFromServer() {
     if (!Array.isArray(serverData)) return;
     if (serverData.length > 0) {
       sessions = serverData.map(s => ({
-        id: s.id, date: s.date, gameType: s.gameType, stakes: s.stakes, location: s.location,
+        id: s.id, date: s.date, gameType: s.gameType, game: s.game || "", stakes: s.stakes, location: s.location,
         startTime: s.startTime, endTime: s.endTime, buyIn: s.buyIn, rebuy: s.rebuy,
         cashOut: s.cashOut, expenses: s.expenses, notes: s.notes,
         bigBlind: s.bigBlind || 0, place: s.place || 0, bounties: s.bounties || 0, players: s.players || 0,
@@ -148,7 +148,7 @@ function computeTrendWindow(days) {
   return { list, agg: aggregate(list) };
 }
 
-function isTournamentType(gameType) { return /锦标|tournament|mtt/i.test(gameType || ""); }
+function isTournamentType(gameType) { return /锦标|tournament|mtt|sng|sit.?n.?go/i.test(gameType || ""); }
 
 function summarizeGroup(list) {
   let buyIn = 0, rebuy = 0, cashOutRaw = 0, profit = 0, hours = 0, wins = 0;
@@ -734,7 +734,7 @@ function sessionIconHTML(s) {
 
 function renderLocSessionRow(s) {
   const m = computeMetrics(s);
-  const title = [s.gameType, s.stakes].filter(Boolean).join(" · ") || "未命名场次";
+  const title = [s.gameType, s.game, s.stakes].filter(Boolean).join(" · ") || "未命名场次";
   return `
     <div class="session-row" style="cursor:default">
       <div class="session-main">
@@ -835,7 +835,7 @@ function renderSessions() {
   const list = sortedDesc();
   view.innerHTML = `<div class="section-title">全部记录</div>` + list.map(s => {
     const m = computeMetrics(s);
-    const title = [s.gameType, s.stakes].filter(Boolean).join(" · ") || "未命名场次";
+    const title = [s.gameType, s.game, s.stakes].filter(Boolean).join(" · ") || "未命名场次";
     const meta = [fmtDateFull(s.date), s.location].filter(Boolean).join(" · ");
     return `
       <div class="session-row" data-id="${s.id}">
@@ -875,7 +875,8 @@ document.getElementById("fab").addEventListener("click", () => openSheet(null));
 const overlay = document.getElementById("overlay");
 const sheetEl = document.getElementById("sheet");
 
-const GAME_TYPES = ["NL Texas Holdem", "PLO", "短牌 Short Deck", "锦标赛 MTT", "其他"];
+const TYPE_OPTIONS = ["现金游戏", "锦标赛", "SNG", "Casino", "Home Game", "Online", "其他"];
+const GAME_OPTIONS = ["No Limit Texas Hold'em", "Pot Limit Omaha", "短牌 Short Deck", "其他"];
 
 function todayStr() {
   const d = new Date();
@@ -903,7 +904,7 @@ function timeSelectHTML(idPrefix, value) {
 function openSheet(id) {
   editingId = id;
   const s = id ? sessions.find(x => x.id === id) : {
-    id: uid(), date: todayStr(), gameType: "NL Texas Holdem", stakes: "", location: "",
+    id: uid(), date: todayStr(), gameType: "现金游戏", game: "No Limit Texas Hold'em", stakes: "", location: "",
     startTime: "", endTime: "", buyIn: "", rebuy: "", cashOut: "", expenses: "", notes: "",
   };
   sheetEl.innerHTML = `
@@ -912,11 +913,16 @@ function openSheet(id) {
       <label>日期</label>
       <input type="text" inputmode="numeric" id="f-date" value="${s.date}" placeholder="YYYY-MM-DD" />
     </div>
-    <div class="row2">
+    <div class="row3">
       <div class="field">
-        <label>游戏类型</label>
-        <input list="gameTypeList" id="f-gameType" value="${escapeHtml(s.gameType || "")}" placeholder="NL Texas Holdem" />
-        <datalist id="gameTypeList">${GAME_TYPES.map(g => `<option value="${g}">`).join("")}</datalist>
+        <label>类型</label>
+        <input list="typeList" id="f-gameType" value="${escapeHtml(s.gameType || "")}" placeholder="现金游戏" />
+        <datalist id="typeList">${TYPE_OPTIONS.map(g => `<option value="${g}">`).join("")}</datalist>
+      </div>
+      <div class="field">
+        <label>游戏</label>
+        <input list="gameList" id="f-game" value="${escapeHtml(s.game || "")}" placeholder="No Limit Hold'em" />
+        <datalist id="gameList">${GAME_OPTIONS.map(g => `<option value="${g}">`).join("")}</datalist>
       </div>
       <div class="field">
         <label>盲注</label>
@@ -984,6 +990,7 @@ function openSheet(id) {
       id: s.id,
       date: document.getElementById("f-date").value || todayStr(),
       gameType: document.getElementById("f-gameType").value.trim(),
+      game: document.getElementById("f-game").value.trim(),
       stakes: document.getElementById("f-stakes").value.trim(),
       location: document.getElementById("f-location").value.trim(),
       startTime: combineTime("f-start"),
@@ -1144,17 +1151,14 @@ function pbtRowsToSessions(rows) {
     if (typeField) notesParts.push("场地类型: " + (PBT_TYPE_LABEL[typeField] || typeField));
     if (isTourn) {
       const bits = [];
-      if (gameRaw) bits.push(gameRaw);
       if (players > 0) bits.push(players + "人参赛");
       if (place > 0) bits.push("第" + place + "名");
       if (bits.length) notesParts.push(bits.join(" · "));
-    } else if (gameRaw && gameRaw !== stakes) {
-      notesParts.push("原始记录: " + gameRaw);
     }
 
     return {
       id: "pbt-" + get(r, "id"),
-      date, gameType, stakes,
+      date, gameType, game: gameRaw, stakes,
       location: get(r, "location").trim(),
       startTime, endTime,
       buyIn, rebuy, cashOut, expenses,
