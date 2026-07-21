@@ -821,7 +821,7 @@ function openLocationDetail(name) {
   drawLineChart(document.getElementById("locChartWrap"), d.curvePoints);
   document.getElementById("btn-close-loc").addEventListener("click", closeSheet);
   sheetEl.querySelectorAll("[data-loc-session-id]").forEach(row => {
-    row.addEventListener("click", () => openSheet(row.dataset.locSessionId));
+    row.addEventListener("click", () => openSessionDetail(row.dataset.locSessionId));
   });
 }
 
@@ -853,7 +853,7 @@ function renderSessions() {
       </div>`;
   }).join("");
   view.querySelectorAll(".session-row").forEach(row => {
-    row.addEventListener("click", () => openSheet(row.dataset.id));
+    row.addEventListener("click", () => openSessionDetail(row.dataset.id));
   });
 }
 
@@ -902,6 +902,49 @@ function timeSelectHTML(idPrefix, value) {
       <span class="time-colon">:</span>
       <select id="${idPrefix}-m">${minOpts}</select>
     </div>`;
+}
+
+function openSessionDetail(id) {
+  const s = sessions.find(x => x.id === id);
+  if (!s) return;
+  const m = computeMetrics(s);
+  const title = [s.gameType, s.game, s.stakes].filter(Boolean).join(" · ") || "未命名场次";
+  const cashOutRaw = (+s.cashOut || 0) - (+s.expenses || 0);
+
+  sheetEl.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h2 style="margin:0">场次详情</h2>
+      <button id="btn-close-detail" style="background:none;border:none;font-size:24px;color:var(--series-1);line-height:1;padding:4px">&times;</button>
+    </div>
+    <div style="text-align:center;margin-bottom:6px">
+      <div style="display:flex;align-items:center;justify-content:center;gap:2px;font-size:17px;font-weight:700">${sessionIconHTML(s)}${escapeHtml(title)}</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:2px">${escapeHtml(s.location || "")}</div>
+    </div>
+    <div style="text-align:center;margin:16px 0">
+      <div style="font-size:30px;font-weight:700;color:${m.profit >= 0 ? "var(--good-text)" : "var(--critical)"}">${moneySigned(m.profit)}</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:2px">${fmtDateWeekday(s.date)}</div>
+    </div>
+    <div class="computed-preview" style="margin-bottom:16px">
+      <div><div class="k">买入</div><div class="v">${money(s.buyIn)}</div></div>
+      <div><div class="k">提现</div><div class="v">${money(cashOutRaw)}</div></div>
+      <div><div class="k">时薪</div><div class="v ${(m.hourly ?? 0) >= 0 ? "good" : "bad"}">${m.hourly == null ? "--" : moneySigned(m.hourly) + "/h"}</div></div>
+      <div><div class="k">补充买入</div><div class="v">${money(s.rebuy)}</div></div>
+      <div><div class="k">其他支出</div><div class="v">${money(s.expenses)}</div></div>
+      <div><div class="k">ROI</div><div class="v ${(m.roi ?? 0) >= 0 ? "good" : "bad"}">${pct(m.roi)}</div></div>
+      <div><div class="k">开始</div><div class="v">${s.startTime || "--"}</div></div>
+      <div><div class="k">结束</div><div class="v">${s.endTime || "--"}</div></div>
+      <div><div class="k">持续时间</div><div class="v">${fmtHours(m.durationHr)}</div></div>
+    </div>
+    ${s.notes ? `<div class="field"><label>备注</label><div style="padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;white-space:pre-wrap;font-size:14px">${escapeHtml(s.notes)}</div></div>` : ""}
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="btn-close-detail2">关闭</button>
+      <button class="btn btn-primary" id="btn-edit-detail">编辑</button>
+    </div>
+  `;
+  showOverlay();
+  document.getElementById("btn-close-detail").addEventListener("click", closeSheet);
+  document.getElementById("btn-close-detail2").addEventListener("click", closeSheet);
+  document.getElementById("btn-edit-detail").addEventListener("click", () => openSheet(id));
 }
 
 function openSheet(id) {
