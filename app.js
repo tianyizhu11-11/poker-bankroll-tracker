@@ -225,6 +225,36 @@ function extractVenueType(list) {
   return "";
 }
 
+const WEEKDAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+function computeWeekdayBreakdown() {
+  const sums = new Array(7).fill(0);
+  sessions.forEach(s => {
+    const jsDay = new Date(s.date + "T00:00:00").getDay();
+    const idx = (jsDay + 6) % 7;
+    sums[idx] += computeMetrics(s).profit;
+  });
+  return WEEKDAY_LABELS.map((label, i) => ({ label, value: sums[i] }));
+}
+
+const MONTH_LABELS = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
+function computeMonthBreakdown() {
+  const sums = new Array(12).fill(0);
+  sessions.forEach(s => {
+    const idx = parseInt(s.date.slice(5, 7), 10) - 1;
+    if (idx >= 0 && idx < 12) sums[idx] += computeMetrics(s).profit;
+  });
+  return MONTH_LABELS.map((label, i) => ({ label, value: sums[i] }));
+}
+
+function computeYearBreakdown() {
+  const map = new Map();
+  sessions.forEach(s => {
+    const year = s.date.slice(0, 4);
+    map.set(year, (map.get(year) || 0) + computeMetrics(s).profit);
+  });
+  return [...map.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([label, value]) => ({ label, value }));
+}
+
 function computeLocationBreakdown() {
   const map = new Map();
   sessions.forEach(s => {
@@ -280,6 +310,63 @@ function buildDonutSVG(segments, bigText, smallText) {
     <text x="50" y="47" text-anchor="middle" font-size="19" font-weight="700" fill="var(--text-primary)">${bigText}</text>
     <text x="50" y="61" text-anchor="middle" font-size="9" fill="var(--text-muted)">${smallText}</text>
   </svg>`;
+}
+
+function buildGroupBarHTML(items) {
+  const W = 300, H = 190, padSide = 6, padTop = 12, padBottom = 8;
+  const innerW = W - padSide * 2, innerH = H - padTop - padBottom;
+  const maxAbs = Math.max(...items.map(it => Math.abs(it.value)), 1);
+  const zeroY = padTop + innerH / 2;
+  const halfH = innerH / 2;
+  const n = items.length;
+  const slot = innerW / n;
+  const barW = Math.min(slot * 0.62, 34);
+
+  let bars = `<line x1="${padSide}" y1="${zeroY.toFixed(2)}" x2="${W - padSide}" y2="${zeroY.toFixed(2)}" stroke="var(--baseline)" stroke-width="1"/>`;
+  items.forEach((it, i) => {
+    const cx = padSide + slot * i + slot / 2;
+    const x = cx - barW / 2;
+    const h = Math.max((Math.abs(it.value) / maxAbs) * halfH, 2);
+    const positive = it.value >= 0;
+    const y = positive ? zeroY - h : zeroY;
+    const color = positive ? "var(--good)" : "var(--critical)";
+    const r = Math.min(4, barW / 2, h / 2);
+    bars += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${barW.toFixed(2)}" height="${h.toFixed(2)}" rx="${r.toFixed(2)}" fill="${color}"/>`;
+    const labelY = positive ? zeroY - h + 8 : zeroY + h - 8;
+    bars += `<text x="${cx.toFixed(2)}" y="${labelY.toFixed(2)}" font-size="9" font-weight="600" fill="#fff" text-anchor="middle" transform="rotate(-90 ${cx.toFixed(2)} ${labelY.toFixed(2)})">${money(it.value)}</text>`;
+  });
+
+  return `
+    <svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${bars}</svg>
+    <div style="display:flex;font-size:11px;color:var(--text-muted);padding:2px 4px 0">
+      ${items.map(it => `<span style="flex:1;text-align:center">${it.label}</span>`).join("")}
+    </div>`;
+}
+
+function renderCharts() {
+  if (!sessions.length) {
+    view.innerHTML = `
+      <div class="empty-state">
+        <div class="big">🃏</div>
+        <p>还没有任何记录</p>
+        <p>点右下角 + 记一局吧</p>
+      </div>`;
+    return;
+  }
+  view.innerHTML = `
+    <div class="chart-card">
+      <h3 style="text-align:center">工作日</h3>
+      ${buildGroupBarHTML(computeWeekdayBreakdown())}
+    </div>
+    <div class="chart-card">
+      <h3 style="text-align:center">月份</h3>
+      ${buildGroupBarHTML(computeMonthBreakdown())}
+    </div>
+    <div class="chart-card">
+      <h3 style="text-align:center">年份</h3>
+      ${buildGroupBarHTML(computeYearBreakdown())}
+    </div>
+  `;
 }
 
 // ---------- charts ----------
@@ -865,6 +952,7 @@ function renderView() {
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === activeTab));
   if (activeTab === "overview") renderOverview();
   else if (activeTab === "locations") renderLocations();
+  else if (activeTab === "charts") renderCharts();
   else renderSessions();
 }
 
