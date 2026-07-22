@@ -1547,17 +1547,41 @@ function todayStr() {
 function autoFormatDateInput(el) {
   el.addEventListener("input", () => {
     const digits = el.value.replace(/\D/g, "").slice(0, 8);
-    let out = digits.slice(0, 4);
-    if (digits.length > 4) out += "-" + digits.slice(4, 6);
-    if (digits.length > 6) out += "-" + digits.slice(6, 8);
+    const yearStr = digits.slice(0, 4);
+    let monthStr = digits.slice(4, 6);
+    let dayStr = digits.slice(6, 8);
+    if (monthStr.length === 2) {
+      const mm = Math.min(12, Math.max(1, parseInt(monthStr, 10) || 1));
+      monthStr = String(mm).padStart(2, "0");
+    }
+    if (dayStr.length === 2) {
+      const year = parseInt(yearStr, 10) || new Date().getFullYear();
+      const month = monthStr.length === 2 ? parseInt(monthStr, 10) : 1;
+      const maxDay = new Date(year, month, 0).getDate();
+      const dd = Math.min(maxDay, Math.max(1, parseInt(dayStr, 10) || 1));
+      dayStr = String(dd).padStart(2, "0");
+    }
+    let out = yearStr;
+    if (digits.length > 4) out += "-" + monthStr;
+    if (digits.length > 6) out += "-" + dayStr;
     el.value = out;
   });
 }
 function autoFormatTimeInput(el) {
   el.addEventListener("input", () => {
     const digits = el.value.replace(/\D/g, "").slice(0, 4);
-    let out = digits.slice(0, 2);
-    if (digits.length > 2) out += ":" + digits.slice(2, 4);
+    let hourStr = digits.slice(0, 2);
+    let minStr = digits.slice(2, 4);
+    if (hourStr.length === 2) {
+      const hh = Math.min(23, parseInt(hourStr, 10) || 0);
+      hourStr = String(hh).padStart(2, "0");
+    }
+    if (minStr.length === 2) {
+      const mm = Math.min(59, parseInt(minStr, 10) || 0);
+      minStr = String(mm).padStart(2, "0");
+    }
+    let out = hourStr;
+    if (digits.length > 2) out += ":" + minStr;
     el.value = out;
   });
 }
