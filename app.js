@@ -698,7 +698,15 @@ function drawMultiLineChart(wrap, points, series) {
       series.filter(sr => sr.visible).map(sr => `<div style="color:${sr.color}">${moneySigned(p[sr.key])}</div>`).join("");
     const leftPct = Math.max(14, Math.min(86, (px / VB_W) * 100));
     tooltip.style.left = leftPct + "%";
-    tooltip.style.top = "6px";
+    const visibleYs = series.filter(sr => sr.visible).map(sr => yAt(p[sr.key]));
+    const avgY = visibleYs.length ? visibleYs.reduce((a, b) => a + b, 0) / visibleYs.length : VB_H / 2;
+    if (avgY < VB_H * 0.55) {
+      tooltip.style.top = "auto";
+      tooltip.style.bottom = "4px";
+    } else {
+      tooltip.style.top = "4px";
+      tooltip.style.bottom = "auto";
+    }
     tooltip.classList.add("show");
   }
   function handleLeave() {
