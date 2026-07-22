@@ -1443,6 +1443,7 @@ function renderWeeklyHistoryTab() {
   [...WEEKLY_HISTORY].reverse().forEach(w => { (groups[w[0]] = groups[w[0]] || []).push(w); });
   const years = Object.keys(groups).sort((a, b) => b - a);
   view.innerHTML = `
+    <h2 style="margin:0 0 14px">Weekly历史数据</h2>
     <div class="stat-grid" style="margin-bottom:16px">
       <div class="stat-tile">
         <div class="label">最新合计 (${latest[0]} ${latest[1]})</div>
