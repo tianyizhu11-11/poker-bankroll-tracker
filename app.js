@@ -662,7 +662,7 @@ function drawMultiLineChart(wrap, points, series) {
     <svg class="chart" viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="none">
       ${grid}
       ${paths}
-      <line class="hover-line" x1="0" y1="${P.t}" x2="0" y2="${VB_H - P.b}" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+      <line class="hover-line" x1="0" y1="2" x2="0" y2="${VB_H - 2}" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
       ${hoverDots}
       ${axisLabels}
     </svg>

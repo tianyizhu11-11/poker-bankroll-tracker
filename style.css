@@ -185,7 +185,9 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
 .chart-tooltip.show { opacity: 1; }
 .chart-tooltip.multi {
   transform: translate(-50%, 0);
-  line-height: 1.5;
+  padding: 3px 6px;
+  font-size: 10px;
+  line-height: 1.35;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
