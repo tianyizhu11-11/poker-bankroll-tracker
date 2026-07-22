@@ -479,6 +479,42 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
 .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; min-width: 0; overflow: hidden; }
 .row2 > *, .row3 > * { min-width: 0; max-width: 100%; overflow: hidden; }
 
+.loc-field { position: relative; overflow: visible; }
+.loc-suggest {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  z-index: 30;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.loc-suggest.hidden { display: none; }
+.loc-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 10px;
+  text-align: left;
+  font-family: inherit;
+  color: var(--text-primary);
+}
+.loc-suggest-item:last-child { border-bottom: none; }
+.loc-suggest-item:active { background: var(--surface-2); }
+.loc-suggest-icon { font-size: 13px; flex: none; }
+.loc-suggest-text { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.loc-suggest-main { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loc-suggest-sub { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .time-select-row {
   display: flex;
   align-items: center;

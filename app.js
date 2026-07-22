@@ -1298,6 +1298,78 @@ function openSessionDetail(id) {
   document.getElementById("btn-edit-detail").addEventListener("click", () => openSheet(id));
 }
 
+function getKnownLocations() {
+  const counts = new Map();
+  sessions.forEach(s => {
+    const name = (s.location || "").trim();
+    if (!name) return;
+    counts.set(name, (counts.get(name) || 0) + 1);
+  });
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]);
+}
+
+function setupLocationAutocomplete() {
+  const input = document.getElementById("f-location");
+  const box = document.getElementById("locSuggest");
+  if (!input || !box) return;
+  const known = getKnownLocations();
+  let remoteTimer = null;
+  let requestSeq = 0;
+
+  function renderItems(items) {
+    if (!items.length) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+    box.innerHTML = items.map(it => `
+      <button type="button" class="loc-suggest-item" data-value="${escapeHtml(it.value)}">
+        <span class="loc-suggest-icon">${it.icon}</span>
+        <span class="loc-suggest-text">
+          <span class="loc-suggest-main">${escapeHtml(it.value)}</span>
+          ${it.sub ? `<span class="loc-suggest-sub">${escapeHtml(it.sub)}</span>` : ""}
+        </span>
+      </button>`).join("");
+    box.classList.remove("hidden");
+    box.querySelectorAll(".loc-suggest-item").forEach(btn => {
+      btn.addEventListener("mousedown", e => {
+        e.preventDefault();
+        input.value = btn.dataset.value;
+        box.classList.add("hidden");
+      });
+    });
+  }
+
+  function update() {
+    const q = input.value.trim();
+    clearTimeout(remoteTimer);
+    if (!q) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+    const qLower = q.toLowerCase();
+    const localMatches = known.filter(name => name.toLowerCase().includes(qLower)).slice(0, 5)
+      .map(name => ({ value: name, icon: "🕘", sub: "常用地点" }));
+    renderItems(localMatches);
+
+    if (q.length < 2) return;
+    const seq = ++requestSeq;
+    remoteTimer = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=0&limit=5&q=${encodeURIComponent(q)}`);
+        if (seq !== requestSeq) return;
+        if (!res.ok) return;
+        const data = await res.json();
+        const localNames = new Set(localMatches.map(m => m.value.toLowerCase()));
+        const remoteMatches = data
+          .map(r => {
+            const parts = (r.display_name || "").split(",").map(p => p.trim());
+            return { value: parts[0], sub: parts.slice(1, 3).join(", "), icon: "📍" };
+          })
+          .filter(m => m.value && !localNames.has(m.value.toLowerCase()));
+        renderItems([...localMatches, ...remoteMatches].slice(0, 8));
+      } catch (e) { /* offline or blocked — local matches already shown */ }
+    }, 400);
+  }
+
+  input.addEventListener("input", update);
+  input.addEventListener("focus", update);
+  input.addEventListener("blur", () => setTimeout(() => box.classList.add("hidden"), 150));
+}
+
 function openSheet(id) {
   editingId = id;
   const s = id ? sessions.find(x => x.id === id) : {
@@ -1326,9 +1398,10 @@ function openSheet(id) {
         <input type="text" id="f-stakes" value="${escapeHtml(s.stakes || "")}" placeholder="0.5/1" />
       </div>
     </div>
-    <div class="field">
+    <div class="field loc-field">
       <label>地点</label>
-      <input type="text" id="f-location" value="${escapeHtml(s.location || "")}" placeholder="俱乐部 / 地址" />
+      <input type="text" id="f-location" autocomplete="off" value="${escapeHtml(s.location || "")}" placeholder="俱乐部 / 地址" />
+      <div class="loc-suggest hidden" id="locSuggest"></div>
     </div>
     <div class="row2">
       <div class="field">
@@ -1376,6 +1449,7 @@ function openSheet(id) {
     ${id ? '<div class="btn-row"><button class="btn btn-danger" id="btn-delete">删除这条记录</button></div>' : ""}
   `;
   showOverlay();
+  setupLocationAutocomplete();
 
   function combineTime(prefix) {
     const h = document.getElementById(prefix + "-h").value;
