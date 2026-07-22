@@ -183,6 +183,12 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
   z-index: 5;
 }
 .chart-tooltip.show { opacity: 1; }
+.chart-tooltip.multi {
+  transform: translate(-50%, 0);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
 .chart-wrap { position: relative; }
 .chart-selected-info {
   margin-top: 8px;

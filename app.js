@@ -507,7 +507,7 @@ function renderTrends() {
   const series = TREND_SERIES_META.map(sr => ({ ...sr, visible: trendsVisible[sr.key] }));
   view.innerHTML = `
     <div class="chart-card">
-      <div id="trendChartWrap"></div>
+      <div class="chart-wrap" id="trendsChartWrap"></div>
       <div class="metric-toggle" style="margin-top:12px">
         ${TREND_RANGES.map(r => `<button class="metric-toggle-btn${trendsRange === r.key ? " active" : ""}" data-range="${r.key}">${r.label}</button>`).join("")}
       </div>
@@ -519,7 +519,7 @@ function renderTrends() {
       </div>
     </div>
   `;
-  drawMultiLineChart(document.getElementById("trendChartWrap"), points, series);
+  drawMultiLineChart(document.getElementById("trendsChartWrap"), points, series);
   view.querySelectorAll("[data-range]").forEach(btn => {
     btn.addEventListener("click", () => { trendsRange = btn.dataset.range; renderTrends(); });
   });
@@ -648,24 +648,67 @@ function drawMultiLineChart(wrap, points, series) {
   }
 
   let paths = "";
+  let hoverDots = "";
   series.forEach(sr => {
     if (!sr.visible) return;
     const d = points.map((p, i) => (i === 0 ? "M" : "L") + xAt(i).toFixed(2) + "," + yAt(p[sr.key]).toFixed(2)).join(" ");
     const lastX = xAt(points.length - 1), lastY = yAt(points[points.length - 1][sr.key]);
     paths += `<path d="${d}" fill="none" stroke="${sr.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
     paths += `<circle cx="${lastX.toFixed(2)}" cy="${lastY.toFixed(2)}" r="3.5" fill="${sr.color}" stroke="var(--surface)" stroke-width="2"/>`;
+    hoverDots += `<circle class="hover-dot" data-series="${sr.key}" r="3.5" fill="${sr.color}" stroke="var(--surface)" stroke-width="1.5" opacity="0"/>`;
   });
 
   wrap.innerHTML = `
     <svg class="chart" viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="none">
       ${grid}
       ${paths}
+      <line class="hover-line" x1="0" y1="${P.t}" x2="0" y2="${VB_H - P.b}" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+      ${hoverDots}
       ${axisLabels}
     </svg>
     <div class="chart-axis-labels" style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);padding:2px 4px 0;margin-left:${((P.l / VB_W) * 100).toFixed(1)}%">
       <span>${points[0].label}</span><span>${points[points.length - 1].label}</span>
     </div>
   `;
+  const tooltip = document.createElement("div");
+  tooltip.className = "chart-tooltip multi";
+  wrap.appendChild(tooltip);
+
+  const svgEl = wrap.querySelector("svg");
+  const hoverLine = svgEl.querySelector(".hover-line");
+  const hoverDotEls = {};
+  svgEl.querySelectorAll(".hover-dot").forEach(el => { hoverDotEls[el.dataset.series] = el; });
+
+  function handleMove(evt) {
+    const rect = svgEl.getBoundingClientRect();
+    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+    const relX = ((clientX - rect.left) / rect.width) * VB_W;
+    let idx = Math.round(((relX - P.l) / innerW) * (points.length - 1));
+    idx = Math.max(0, Math.min(points.length - 1, idx));
+    const px = xAt(idx);
+    const p = points[idx];
+    hoverLine.setAttribute("x1", px); hoverLine.setAttribute("x2", px); hoverLine.setAttribute("opacity", 1);
+    series.forEach(sr => {
+      const dot = hoverDotEls[sr.key];
+      if (!dot) return;
+      if (!sr.visible) { dot.setAttribute("opacity", 0); return; }
+      dot.setAttribute("cx", px); dot.setAttribute("cy", yAt(p[sr.key]).toFixed(2)); dot.setAttribute("opacity", 1);
+    });
+    tooltip.innerHTML = `<div>${fmtDateFull(p.date)}</div>` +
+      series.filter(sr => sr.visible).map(sr => `<div style="color:${sr.color}">${moneySigned(p[sr.key])}</div>`).join("");
+    const leftPct = Math.max(14, Math.min(86, (px / VB_W) * 100));
+    tooltip.style.left = leftPct + "%";
+    tooltip.style.top = "6px";
+    tooltip.classList.add("show");
+  }
+  function handleLeave() {
+    hoverLine.setAttribute("opacity", 0);
+    Object.values(hoverDotEls).forEach(dot => dot.setAttribute("opacity", 0));
+    tooltip.classList.remove("show");
+  }
+  svgEl.addEventListener("pointermove", handleMove);
+  svgEl.addEventListener("pointerdown", handleMove);
+  svgEl.addEventListener("pointerleave", handleLeave);
 }
 
 function drawBarChart(wrap, points) {
