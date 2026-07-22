@@ -547,14 +547,17 @@ function moneyCompactSigned(v) {
   return sign + "$" + body;
 }
 
-function drawLineChart(wrap, points) {
+function drawLineChart(wrap, points, opts) {
+  opts = opts || {};
+  const dashed = !!opts.dashed;
+  const xTicks = opts.xTicks;
   wrap.innerHTML = "";
   if (points.length < 2) {
     wrap.innerHTML = '<div class="empty-state" style="padding:24px"><p>数据不足,再记一局看曲线</p></div>';
     return;
   }
   const [min, max] = niceRange(points.map(p => p.value));
-  const P = { l: 38, r: PAD.r, t: PAD.t, b: PAD.b };
+  const P = { l: 38, r: PAD.r, t: PAD.t, b: xTicks ? 20 : PAD.b };
   const innerW = VB_W - P.l - P.r, innerH = VB_H - P.t - P.b;
   const xAt = i => P.l + (i / (points.length - 1)) * innerW;
   const yAt = v => P.t + innerH - ((v - min) / (max - min)) * innerH;
@@ -572,21 +575,33 @@ function drawLineChart(wrap, points) {
     grid += `<line x1="${P.l}" y1="${y0.toFixed(2)}" x2="${VB_W - P.r}" y2="${y0.toFixed(2)}" stroke="var(--baseline)" stroke-width="1"/>`;
   }
 
+  let xTickHTML = "";
+  if (xTicks && xTicks.length) {
+    xTicks.forEach((t, i) => {
+      const x = xAt(t.index);
+      const anchor = i === 0 ? "start" : (i === xTicks.length - 1 ? "end" : "middle");
+      xTickHTML += `<text x="${x.toFixed(2)}" y="${(VB_H - 4).toFixed(2)}" font-size="8" fill="var(--text-muted)" text-anchor="${anchor}">${escapeHtml(t.label)}</text>`;
+    });
+  }
+
   const d = points.map((p, i) => (i === 0 ? "M" : "L") + xAt(i).toFixed(2) + "," + yAt(p.value).toFixed(2)).join(" ");
   const lastX = xAt(points.length - 1), lastY = yAt(points[points.length - 1].value);
+  const lineY1 = dashed ? 2 : P.t;
+  const lineY2 = dashed ? VB_H - 2 : VB_H - P.b;
 
   wrap.innerHTML = `
     <svg class="chart" viewBox="0 0 ${VB_W} ${VB_H}" preserveAspectRatio="none">
       ${grid}
       <path d="${d}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="${lastX.toFixed(2)}" cy="${lastY.toFixed(2)}" r="4" fill="var(--series-1)" stroke="var(--surface)" stroke-width="2"/>
-      <line class="hover-line" x1="0" y1="${P.t}" x2="0" y2="${VB_H - P.b}" stroke="var(--text-muted)" stroke-width="1" opacity="0"/>
+      <line class="hover-line" x1="0" y1="${lineY1}" x2="0" y2="${lineY2}" stroke="var(--text-muted)" stroke-width="1"${dashed ? ' stroke-dasharray="3,2"' : ""} opacity="0"/>
       <circle class="hover-dot" r="4.5" fill="var(--series-1)" stroke="var(--surface)" stroke-width="2" opacity="0"/>
       ${axisLabels}
+      ${xTickHTML}
     </svg>
-    <div class="chart-axis-labels" style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);padding:2px 4px 0;margin-left:${((P.l / VB_W) * 100).toFixed(1)}%">
+    ${xTicks ? "" : `<div class="chart-axis-labels" style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);padding:2px 4px 0;margin-left:${((P.l / VB_W) * 100).toFixed(1)}%">
       <span>${points[0].label}</span><span>${points[points.length - 1].label}</span>
-    </div>
+    </div>`}
   `;
   const tooltip = document.createElement("div");
   tooltip.className = "chart-tooltip";
@@ -1334,6 +1349,14 @@ function renderWeeklyHistoryTab() {
   }
   const latest = WEEKLY_HISTORY[WEEKLY_HISTORY.length - 1];
   const points = WEEKLY_HISTORY.map(w => ({ value: w[3], label: w[1], fullLabel: `${w[0]} ${w[1]}` }));
+  const xTicks = [];
+  let lastTickYear = null;
+  WEEKLY_HISTORY.forEach((w, i) => {
+    if (w[0] !== lastTickYear) { xTicks.push({ index: i, label: String(w[0]) }); lastTickYear = w[0]; }
+  });
+  if (xTicks[xTicks.length - 1].index !== WEEKLY_HISTORY.length - 1) {
+    xTicks.push({ index: WEEKLY_HISTORY.length - 1, label: latest[1] });
+  }
   const groups = {};
   [...WEEKLY_HISTORY].reverse().forEach(w => { (groups[w[0]] = groups[w[0]] || []).push(w); });
   const years = Object.keys(groups).sort((a, b) => b - a);
@@ -1360,7 +1383,7 @@ function renderWeeklyHistoryTab() {
         </div>`).join("")}
     `).join("")}
   `;
-  drawLineChart(document.getElementById("weeklyHistChartWrap"), points);
+  drawLineChart(document.getElementById("weeklyHistChartWrap"), points, { dashed: true, xTicks });
 }
 
 function renderNoteTab(key) {
