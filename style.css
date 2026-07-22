@@ -550,32 +550,6 @@ body.no-tabbar { padding-bottom: 0; }
 .loc-suggest-main { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .loc-suggest-sub { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.time-select-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 8px;
-  min-width: 0;
-  overflow: hidden;
-}
-.time-select-row select {
-  flex: 1;
-  min-width: 0;
-  max-width: 100%;
-  border: none;
-  background: transparent;
-  font-size: 16px;
-  color: var(--text-primary);
-  font-family: inherit;
-  text-align: center;
-  appearance: none;
-  -webkit-appearance: none;
-}
-.time-colon { color: var(--text-muted); font-weight: 700; flex: none; }
-
 .computed-preview {
   background: var(--surface);
   border: 1px solid var(--border);

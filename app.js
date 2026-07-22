@@ -1544,22 +1544,22 @@ function todayStr() {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
-function timeSelectHTML(idPrefix, value) {
-  const [h, m] = (value || "").split(":");
-  const hourOpts = ['<option value="">--</option>'].concat(
-    Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"))
-      .map(hh => `<option value="${hh}"${hh === h ? " selected" : ""}>${hh}</option>`)
-  ).join("");
-  const minOpts = ['<option value="">--</option>'].concat(
-    Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"))
-      .map(mm => `<option value="${mm}"${mm === m ? " selected" : ""}>${mm}</option>`)
-  ).join("");
-  return `
-    <div class="time-select-row">
-      <select id="${idPrefix}-h">${hourOpts}</select>
-      <span class="time-colon">:</span>
-      <select id="${idPrefix}-m">${minOpts}</select>
-    </div>`;
+function autoFormatDateInput(el) {
+  el.addEventListener("input", () => {
+    const digits = el.value.replace(/\D/g, "").slice(0, 8);
+    let out = digits.slice(0, 4);
+    if (digits.length > 4) out += "-" + digits.slice(4, 6);
+    if (digits.length > 6) out += "-" + digits.slice(6, 8);
+    el.value = out;
+  });
+}
+function autoFormatTimeInput(el) {
+  el.addEventListener("input", () => {
+    const digits = el.value.replace(/\D/g, "").slice(0, 4);
+    let out = digits.slice(0, 2);
+    if (digits.length > 2) out += ":" + digits.slice(2, 4);
+    el.value = out;
+  });
 }
 
 function openSessionDetail(id) {
@@ -1710,12 +1710,12 @@ function openSheet(id) {
       <div class="field">
         <label>开始时间</label>
         <input type="text" inputmode="numeric" id="f-start-date" value="${s.date}" placeholder="YYYY-MM-DD" style="margin-bottom:6px" />
-        ${timeSelectHTML("f-start", s.startTime)}
+        <input type="text" inputmode="numeric" id="f-start-time" value="${s.startTime || ""}" placeholder="HH:MM" />
       </div>
       <div class="field">
         <label>结束时间</label>
         <input type="text" inputmode="numeric" id="f-end-date" value="${s.endDate || s.date}" placeholder="YYYY-MM-DD" style="margin-bottom:6px" />
-        ${timeSelectHTML("f-end", s.endTime)}
+        <input type="text" inputmode="numeric" id="f-end-time" value="${s.endTime || ""}" placeholder="HH:MM" />
       </div>
     </div>
     <div class="row3">
@@ -1755,12 +1755,9 @@ function openSheet(id) {
   `;
   showOverlay();
   setupLocationAutocomplete();
+  [document.getElementById("f-start-date"), document.getElementById("f-end-date")].forEach(autoFormatDateInput);
+  [document.getElementById("f-start-time"), document.getElementById("f-end-time")].forEach(autoFormatTimeInput);
 
-  function combineTime(prefix) {
-    const h = document.getElementById(prefix + "-h").value;
-    const m = document.getElementById(prefix + "-m").value;
-    return (h && m) ? h + ":" + m : "";
-  }
   function readForm() {
     const startDate = document.getElementById("f-start-date").value || todayStr();
     const endDateRaw = document.getElementById("f-end-date").value.trim();
@@ -1772,8 +1769,8 @@ function openSheet(id) {
       game: document.getElementById("f-game").value.trim(),
       stakes: document.getElementById("f-stakes").value.trim(),
       location: document.getElementById("f-location").value.trim(),
-      startTime: combineTime("f-start"),
-      endTime: combineTime("f-end"),
+      startTime: document.getElementById("f-start-time").value.trim(),
+      endTime: document.getElementById("f-end-time").value.trim(),
       buyIn: document.getElementById("f-buyIn").value,
       rebuy: document.getElementById("f-rebuy").value,
       cashOut: document.getElementById("f-cashOut").value,
@@ -1788,7 +1785,7 @@ function openSheet(id) {
     ph.textContent = m.hourly == null ? "--" : moneySigned(m.hourly) + "/h"; ph.className = "v " + (m.hourly >= 0 ? "good" : "bad");
     pr.textContent = pct(m.roi); pr.className = "v " + ((m.roi ?? 0) >= 0 ? "good" : "bad");
   }
-  ["f-buyIn", "f-rebuy", "f-cashOut", "f-expenses", "f-start-date", "f-start-h", "f-start-m", "f-end-date", "f-end-h", "f-end-m"].forEach(id => {
+  ["f-buyIn", "f-rebuy", "f-cashOut", "f-expenses", "f-start-date", "f-start-time", "f-end-date", "f-end-time"].forEach(id => {
     document.getElementById(id).addEventListener("input", updatePreview);
     document.getElementById(id).addEventListener("change", updatePreview);
   });
