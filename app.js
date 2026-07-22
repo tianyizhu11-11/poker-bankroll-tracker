@@ -1792,9 +1792,15 @@ function openSheet(id) {
     const data = readForm();
     const idx = sessions.findIndex(x => x.id === data.id);
     const isNew = idx < 0;
+    const oldData = isNew ? null : sessions[idx];
     if (idx >= 0) sessions[idx] = data; else sessions.push(data);
     saveSessions();
-    if (isNew) applySessionToWeeklyHistory(data.date, computeMetrics(data).profit);
+    if (isNew) {
+      applySessionToWeeklyHistory(data.date, computeMetrics(data).profit);
+    } else if (oldData) {
+      applySessionToWeeklyHistory(oldData.date, -computeMetrics(oldData).profit);
+      applySessionToWeeklyHistory(data.date, computeMetrics(data).profit);
+    }
     closeSheet();
     renderView();
   });
@@ -1805,6 +1811,7 @@ function openSheet(id) {
       lastDeleted = { data: sessions[idx], idx };
       sessions.splice(idx, 1);
       saveSessions();
+      applySessionToWeeklyHistory(lastDeleted.data.date, -computeMetrics(lastDeleted.data).profit);
       closeSheet();
       renderView();
       showUndoToast("已删除该记录");
@@ -1833,6 +1840,7 @@ function showUndoToast(message) {
     if (lastDeleted) {
       sessions.splice(lastDeleted.idx, 0, lastDeleted.data);
       saveSessions();
+      applySessionToWeeklyHistory(lastDeleted.data.date, computeMetrics(lastDeleted.data).profit);
       renderView();
       lastDeleted = null;
     }
