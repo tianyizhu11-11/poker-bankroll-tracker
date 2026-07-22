@@ -76,7 +76,7 @@ async function syncFromServer() {
     if (serverData.length > 0) {
       sessions = serverData.map(s => ({
         id: s.id, date: s.date, gameType: s.gameType, game: s.game || "", stakes: s.stakes, location: s.location,
-        startTime: s.startTime, endTime: s.endTime, buyIn: s.buyIn, rebuy: s.rebuy,
+        startTime: s.startTime, endTime: s.endTime, endDate: s.endDate || "", buyIn: s.buyIn, rebuy: s.rebuy,
         cashOut: s.cashOut, expenses: s.expenses, notes: s.notes,
         bigBlind: s.bigBlind || 0, place: s.place || 0, bounties: s.bounties || 0, players: s.players || 0,
       }));
@@ -100,8 +100,13 @@ function computeMetrics(s) {
   let durationMin = 0;
   if (s.startTime && s.endTime) {
     const start = toDate(s.date, s.startTime);
-    let end = toDate(s.date, s.endTime);
-    if (end <= start) end = new Date(end.getTime() + 24 * 3600 * 1000);
+    let end;
+    if (s.endDate) {
+      end = toDate(s.endDate, s.endTime);
+    } else {
+      end = toDate(s.date, s.endTime);
+      if (end <= start) end = new Date(end.getTime() + 24 * 3600 * 1000);
+    }
     durationMin = (end - start) / 60000;
   }
   const durationHr = durationMin / 60;
@@ -1585,7 +1590,7 @@ function openSessionDetail(id) {
       <div><div class="k">其他支出</div><div class="v">${money(s.expenses)}</div></div>
       <div><div class="k">ROI</div><div class="v ${(m.roi ?? 0) >= 0 ? "good" : "bad"}">${pct(m.roi)}</div></div>
       <div><div class="k">开始</div><div class="v">${s.startTime || "--"}</div></div>
-      <div><div class="k">结束</div><div class="v">${s.endTime || "--"}</div></div>
+      <div><div class="k">结束</div><div class="v">${s.endTime ? (s.endDate ? fmtDate(s.endDate) + " " : "") + s.endTime : "--"}</div></div>
       <div><div class="k">持续时间</div><div class="v">${fmtHours(m.durationHr)}</div></div>
     </div>
     ${s.notes ? `<div class="field"><label>备注</label><div style="padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;white-space:pre-wrap;font-size:14px">${escapeHtml(s.notes)}</div></div>` : ""}
@@ -1676,14 +1681,10 @@ function openSheet(id) {
   editingId = id;
   const s = id ? sessions.find(x => x.id === id) : {
     id: uid(), date: todayStr(), gameType: "现金游戏", game: "No Limit Texas Hold'em", stakes: "", location: "",
-    startTime: "", endTime: "", buyIn: "", rebuy: "", cashOut: "", expenses: "", notes: "",
+    startTime: "", endTime: "", endDate: "", buyIn: "", rebuy: "", cashOut: "", expenses: "", notes: "",
   };
   sheetEl.innerHTML = `
     <h2>${id ? "编辑场次" : "记一局"}</h2>
-    <div class="field">
-      <label>日期</label>
-      <input type="text" inputmode="numeric" id="f-date" value="${s.date}" placeholder="YYYY-MM-DD" />
-    </div>
     <div class="row3">
       <div class="field">
         <label>类型</label>
@@ -1708,10 +1709,12 @@ function openSheet(id) {
     <div class="row2">
       <div class="field">
         <label>开始时间</label>
+        <input type="text" inputmode="numeric" id="f-start-date" value="${s.date}" placeholder="YYYY-MM-DD" style="margin-bottom:6px" />
         ${timeSelectHTML("f-start", s.startTime)}
       </div>
       <div class="field">
         <label>结束时间</label>
+        <input type="text" inputmode="numeric" id="f-end-date" value="${s.endDate || s.date}" placeholder="YYYY-MM-DD" style="margin-bottom:6px" />
         ${timeSelectHTML("f-end", s.endTime)}
       </div>
     </div>
@@ -1759,9 +1762,12 @@ function openSheet(id) {
     return (h && m) ? h + ":" + m : "";
   }
   function readForm() {
+    const startDate = document.getElementById("f-start-date").value || todayStr();
+    const endDateRaw = document.getElementById("f-end-date").value.trim();
     return {
       id: s.id,
-      date: document.getElementById("f-date").value || todayStr(),
+      date: startDate,
+      endDate: endDateRaw && endDateRaw !== startDate ? endDateRaw : "",
       gameType: document.getElementById("f-gameType").value.trim(),
       game: document.getElementById("f-game").value.trim(),
       stakes: document.getElementById("f-stakes").value.trim(),
@@ -1782,7 +1788,7 @@ function openSheet(id) {
     ph.textContent = m.hourly == null ? "--" : moneySigned(m.hourly) + "/h"; ph.className = "v " + (m.hourly >= 0 ? "good" : "bad");
     pr.textContent = pct(m.roi); pr.className = "v " + ((m.roi ?? 0) >= 0 ? "good" : "bad");
   }
-  ["f-buyIn", "f-rebuy", "f-cashOut", "f-expenses", "f-start-h", "f-start-m", "f-end-h", "f-end-m", "f-date"].forEach(id => {
+  ["f-buyIn", "f-rebuy", "f-cashOut", "f-expenses", "f-start-date", "f-start-h", "f-start-m", "f-end-date", "f-end-h", "f-end-m"].forEach(id => {
     document.getElementById(id).addEventListener("input", updatePreview);
     document.getElementById(id).addEventListener("change", updatePreview);
   });
