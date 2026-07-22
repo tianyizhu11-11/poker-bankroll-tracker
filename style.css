@@ -428,6 +428,8 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
   z-index: 12;
 }
 .fab:active { transform: scale(0.96); }
+.fab.hidden { display: none; }
+.icon-btn.hidden { display: none; }
 
 .tabbar {
   position: fixed;
@@ -438,6 +440,8 @@ svg.chart { display: block; width: 100%; height: auto; overflow: visible; touch-
   padding: 6px 0 calc(6px + env(safe-area-inset-bottom));
   z-index: 11;
 }
+.tabbar.hidden { display: none; }
+body.no-tabbar { padding-bottom: 0; }
 .tab-btn {
   flex: 1;
   background: none;

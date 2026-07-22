@@ -9,6 +9,7 @@ const PAD = { l: 8, r: 8, t: 14, b: 10 };
 
 let sessions = loadSessions();
 let activeTab = "overview";
+let activeSection = "bankroll";
 let editingId = null;
 let lastDeleted = null;
 let toastTimer = null;
@@ -1373,11 +1374,18 @@ function renderNoteTab(key) {
     </div>`;
 }
 
+const SECTIONS = [{ key: "bankroll", label: "扑克资金记录" }, ...NOTE_TABS];
+
 function renderView() {
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === activeTab));
-  document.querySelectorAll(".menu-item").forEach(b => b.classList.toggle("active", b.dataset.note === activeTab));
-  const noteTab = NOTE_TABS.find(t => t.key === activeTab);
-  if (noteTab) { renderNoteTab(activeTab); return; }
+  document.querySelectorAll(".menu-item").forEach(b => b.classList.toggle("active", b.dataset.section === activeSection));
+  document.querySelector(".tabbar").classList.toggle("hidden", activeSection !== "bankroll");
+  document.getElementById("fab").classList.toggle("hidden", activeSection !== "bankroll");
+  document.getElementById("importBtn").classList.toggle("hidden", activeSection !== "bankroll");
+  document.body.classList.toggle("no-tabbar", activeSection !== "bankroll");
+
+  if (activeSection !== "bankroll") { renderNoteTab(activeSection); return; }
+
   if (activeTab === "overview") renderOverview();
   else if (activeTab === "locations") renderLocations();
   else if (activeTab === "charts") renderCharts();
@@ -1387,17 +1395,17 @@ function renderView() {
 
 // ---------- tabs & fab ----------
 document.querySelectorAll(".tab-btn").forEach(btn => {
-  btn.addEventListener("click", () => { activeTab = btn.dataset.tab; renderView(); });
+  btn.addEventListener("click", () => { activeTab = btn.dataset.tab; activeSection = "bankroll"; renderView(); });
 });
 document.getElementById("fab").addEventListener("click", () => openSheet(null));
 
-// ---------- top-left dropdown menu (note tabs) ----------
+// ---------- top-left dropdown menu (section switcher) ----------
 const menuBtn = document.getElementById("menuBtn");
 const menuDropdown = document.getElementById("menuDropdown");
-menuDropdown.innerHTML = NOTE_TABS.map(t => `<button type="button" class="menu-item" data-note="${t.key}">${escapeHtml(t.label)}</button>`).join("");
+menuDropdown.innerHTML = SECTIONS.map(t => `<button type="button" class="menu-item" data-section="${t.key}">${escapeHtml(t.label)}</button>`).join("");
 menuDropdown.querySelectorAll(".menu-item").forEach(btn => {
   btn.addEventListener("click", () => {
-    activeTab = btn.dataset.note;
+    activeSection = btn.dataset.section;
     menuDropdown.classList.add("hidden");
     renderView();
   });
