@@ -1354,8 +1354,8 @@ function renderWeeklyHistoryTab() {
         <div class="session-row">
           <div class="session-main"><div class="title">${w[1]}</div></div>
           <div class="session-side">
-            <div class="profit ${w[3] >= 0 ? "good" : "bad"}">${moneySigned(w[3])}</div>
-            ${w[2] != null ? `<div class="hourly">${moneySigned(w[2])} 本周</div>` : ""}
+            <div class="profit${w[2] != null ? (w[2] >= 0 ? " good" : " bad") : ""}">${w[2] != null ? moneySigned(w[2]) : "--"}</div>
+            <div class="hourly">总计 ${moneySigned(w[3])}</div>
           </div>
         </div>`).join("")}
     `).join("")}
