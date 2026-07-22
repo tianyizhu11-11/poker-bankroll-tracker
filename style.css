@@ -104,6 +104,36 @@ body.modal-open {
   font-size: 17px;
 }
 .brand-mark { flex: none; }
+.topbar-left { position: relative; display: flex; align-items: center; }
+.menu-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 6px;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 6px;
+  z-index: 25;
+}
+.menu-dropdown.hidden { display: none; }
+.menu-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-primary);
+  text-align: left;
+}
+.menu-item:active { background: var(--surface-2); }
+.menu-item.active { color: var(--series-1); }
 .icon-btn {
   background: none;
   border: none;

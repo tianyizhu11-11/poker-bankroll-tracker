@@ -1210,8 +1210,28 @@ function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// ---------- note tabs (via top-left dropdown menu) ----------
+const NOTE_TABS = [
+  { key: "note1", label: "笔记 1" },
+  { key: "note2", label: "笔记 2" },
+  { key: "note3", label: "笔记 3" },
+];
+
+function renderNoteTab(key) {
+  const tab = NOTE_TABS.find(t => t.key === key);
+  view.innerHTML = `
+    <div class="empty-state">
+      <div class="big">📝</div>
+      <p>${escapeHtml(tab ? tab.label : "笔记")}</p>
+      <p>内容待添加</p>
+    </div>`;
+}
+
 function renderView() {
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === activeTab));
+  document.querySelectorAll(".menu-item").forEach(b => b.classList.toggle("active", b.dataset.note === activeTab));
+  const noteTab = NOTE_TABS.find(t => t.key === activeTab);
+  if (noteTab) { renderNoteTab(activeTab); return; }
   if (activeTab === "overview") renderOverview();
   else if (activeTab === "locations") renderLocations();
   else if (activeTab === "charts") renderCharts();
@@ -1224,6 +1244,27 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => { activeTab = btn.dataset.tab; renderView(); });
 });
 document.getElementById("fab").addEventListener("click", () => openSheet(null));
+
+// ---------- top-left dropdown menu (note tabs) ----------
+const menuBtn = document.getElementById("menuBtn");
+const menuDropdown = document.getElementById("menuDropdown");
+menuDropdown.innerHTML = NOTE_TABS.map(t => `<button type="button" class="menu-item" data-note="${t.key}">${escapeHtml(t.label)}</button>`).join("");
+menuDropdown.querySelectorAll(".menu-item").forEach(btn => {
+  btn.addEventListener("click", () => {
+    activeTab = btn.dataset.note;
+    menuDropdown.classList.add("hidden");
+    renderView();
+  });
+});
+menuBtn.addEventListener("click", e => {
+  e.stopPropagation();
+  menuDropdown.classList.toggle("hidden");
+});
+document.addEventListener("click", e => {
+  if (!menuDropdown.classList.contains("hidden") && !menuDropdown.contains(e.target) && e.target !== menuBtn) {
+    menuDropdown.classList.add("hidden");
+  }
+});
 
 // ---------- add/edit sheet ----------
 const overlay = document.getElementById("overlay");
