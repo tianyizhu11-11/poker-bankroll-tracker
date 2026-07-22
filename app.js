@@ -4,6 +4,8 @@
 const STORAGE_KEY = "pbt_sessions_v1";
 const AUTH_KEY = "pbt_auth_token";
 const API_URL = "/api/sessions";
+const WEEKLY_STORAGE_KEY = "pbt_weekly_history_v1";
+const WEEKLY_API_URL = "/api/weekly-history";
 const VB_W = 300, VB_H = 150;
 const PAD = { l: 8, r: 8, t: 14, b: 10 };
 
@@ -16,6 +18,7 @@ let toastTimer = null;
 let chartsDurationMetric = "profit";
 let trendsRange = "max";
 let trendsVisible = { cash: true, tourn: true, total: true };
+let WEEKLY_HISTORY = [];
 
 // ---------- storage ----------
 function loadSessions() {
@@ -1234,7 +1237,7 @@ const NOTE_TABS = [
 ];
 
 // [year, week label, this-week net (null if unknown), cumulative total after that week]
-const WEEKLY_HISTORY = [
+const WEEKLY_HISTORY_DEFAULT = [
   [2024,"Wk15&Wk16",null,-1797],
   [2024,"Wk17",575,-1222],
   [2024,"Wk18",-64,-1286],
@@ -1341,6 +1344,85 @@ const WEEKLY_HISTORY = [
   [2026,"Wk29",-482,-2512],
   [2026,"Wk30",1123,-1389],
 ];
+
+function loadWeeklyHistory() {
+  try {
+    const raw = localStorage.getItem(WEEKLY_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* ignore */ }
+  return WEEKLY_HISTORY_DEFAULT.map(w => [...w]);
+}
+function saveWeeklyHistory() {
+  localStorage.setItem(WEEKLY_STORAGE_KEY, JSON.stringify(WEEKLY_HISTORY));
+}
+WEEKLY_HISTORY = loadWeeklyHistory();
+
+function syncWeeklyHistoryToServer() {
+  const token = getAuthToken();
+  if (!token) return;
+  fetch(WEEKLY_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: JSON.stringify(WEEKLY_HISTORY),
+  }).then(res => {
+    if (res.status === 401) {
+      localStorage.removeItem(AUTH_KEY);
+      showToast("密码错误,Weekly数据仅保存在本机");
+    } else if (!res.ok) {
+      showToast("Weekly同步失败,数据已保存在本机");
+    }
+  }).catch(() => { showToast("网络异常,Weekly数据已保存在本机"); });
+}
+async function syncWeeklyHistoryFromServer() {
+  try {
+    const res = await fetch(WEEKLY_API_URL);
+    if (!res.ok) return;
+    const serverData = await res.json();
+    if (!Array.isArray(serverData)) return;
+    if (serverData.length > 0) {
+      WEEKLY_HISTORY = serverData.map(r => [r.year, r.label, r.weekNet, r.total]);
+      saveWeeklyHistory();
+      if (activeSection === "note1") renderView();
+    } else if (WEEKLY_HISTORY.length > 0) {
+      syncWeeklyHistoryToServer();
+    }
+  } catch (e) { /* offline: keep local cache */ }
+}
+
+// ISO-8601 week (Monday-start) — matches the week numbering used in the Casino Weekly ledger
+function isoWeekOf(dateStr) {
+  const d = new Date(dateStr + "T00:00:00Z");
+  const dayNum = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  const week = 1 + Math.round(((d - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+  return { year: d.getUTCFullYear(), week };
+}
+function parseWeekLabel(label) {
+  return (label.match(/\d+/g) || []).map(Number);
+}
+function weeklyHistorySortKey(entry) {
+  const nums = parseWeekLabel(entry[1]);
+  return entry[0] * 100 + Math.max(...nums);
+}
+function applySessionToWeeklyHistory(dateStr, profit) {
+  if (!dateStr || !Number.isFinite(profit) || profit === 0) return;
+  const { year, week } = isoWeekOf(dateStr);
+  const idx = WEEKLY_HISTORY.findIndex(w => w[0] === year && parseWeekLabel(w[1]).includes(week));
+  if (idx >= 0) {
+    WEEKLY_HISTORY[idx][2] = (WEEKLY_HISTORY[idx][2] || 0) + profit;
+    for (let i = idx; i < WEEKLY_HISTORY.length; i++) WEEKLY_HISTORY[i][3] += profit;
+  } else {
+    const newKey = year * 100 + week;
+    let insertAt = WEEKLY_HISTORY.findIndex(w => weeklyHistorySortKey(w) > newKey);
+    if (insertAt === -1) insertAt = WEEKLY_HISTORY.length;
+    const prevTotal = insertAt > 0 ? WEEKLY_HISTORY[insertAt - 1][3] : 0;
+    WEEKLY_HISTORY.splice(insertAt, 0, [year, `Wk${week}`, profit, prevTotal + profit]);
+    for (let i = insertAt + 1; i < WEEKLY_HISTORY.length; i++) WEEKLY_HISTORY[i][3] += profit;
+  }
+  saveWeeklyHistory();
+  syncWeeklyHistoryToServer();
+}
 
 function renderWeeklyHistoryTab() {
   if (!WEEKLY_HISTORY.length) {
@@ -1709,8 +1791,10 @@ function openSheet(id) {
   document.getElementById("btn-save").addEventListener("click", () => {
     const data = readForm();
     const idx = sessions.findIndex(x => x.id === data.id);
+    const isNew = idx < 0;
     if (idx >= 0) sessions[idx] = data; else sessions.push(data);
     saveSessions();
+    if (isNew) applySessionToWeeklyHistory(data.date, computeMetrics(data).profit);
     closeSheet();
     renderView();
   });
@@ -1908,4 +1992,5 @@ function confirmImport(imported) {
 // ---------- init ----------
 renderView();
 syncFromServer();
+syncWeeklyHistoryFromServer();
 })();
