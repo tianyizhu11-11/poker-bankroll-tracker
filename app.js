@@ -1212,12 +1212,158 @@ function escapeHtml(str) {
 
 // ---------- note tabs (via top-left dropdown menu) ----------
 const NOTE_TABS = [
-  { key: "note1", label: "笔记 1" },
+  { key: "note1", label: "Weekly 历史" },
   { key: "note2", label: "笔记 2" },
   { key: "note3", label: "笔记 3" },
 ];
 
+// [year, week label, this-week net (null if unknown), cumulative total after that week]
+const WEEKLY_HISTORY = [
+  [2024,"Wk15&Wk16",null,-1797],
+  [2024,"Wk17",575,-1222],
+  [2024,"Wk18",-64,-1286],
+  [2024,"Wk19",1366,80],
+  [2024,"Wk20",-196,-116],
+  [2024,"Wk21",-1455,-1571],
+  [2024,"Wk22",-935,-2506],
+  [2024,"Wk23",102,-2404],
+  [2024,"Wk24",1100,-1304],
+  [2024,"Wk25",-58,-1362],
+  [2024,"Wk26",1001,-361],
+  [2024,"Wk27",523,162],
+  [2024,"Wk28",-531,-369],
+  [2024,"Wk29",-1167,-1536],
+  [2024,"Wk30",-175,-1711],
+  [2024,"Wk31",-108,-1819],
+  [2024,"Wk32",668,-1151],
+  [2024,"Wk33",667,-484],
+  [2024,"Wk34",-76,-560],
+  [2024,"Wk35",-611,-1171],
+  [2024,"Wk36",568,-603],
+  [2024,"Wk37",-200,-803],
+  [2024,"Wk38",1288,479],
+  [2024,"Wk39",116,595],
+  [2024,"Wk40",1296,1891],
+  [2024,"Wk41",-379,1512],
+  [2024,"Wk42",-558,954],
+  [2024,"Wk43",1054,2008],
+  [2024,"Wk44",159,2167],
+  [2024,"Wk45",1080,3247],
+  [2024,"Wk46",-1106,2141],
+  [2024,"Wk47",717,2858],
+  [2024,"Wk48",3986,6844],
+  [2025,"Wk7",1008,7852],
+  [2025,"Wk8",787,8639],
+  [2025,"Wk9",3234,11873],
+  [2025,"Wk10",-184,11689],
+  [2025,"Wk11",248,11937],
+  [2025,"Wk12",235,12172],
+  [2025,"Wk13",-1010,11162],
+  [2025,"Wk14",-1246,9916],
+  [2025,"Wk15",703,10619],
+  [2025,"Wk16",-708,9911],
+  [2025,"Wk17",1951,11862],
+  [2025,"Wk18",684,12546],
+  [2025,"Wk19",418,12964],
+  [2025,"Wk20",2513,15477],
+  [2025,"Wk21",71,15548],
+  [2025,"Wk22",2940,18488],
+  [2025,"Wk23",-726,17762],
+  [2025,"Wk24",-361,17401],
+  [2025,"Wk25",-4031,13370],
+  [2025,"Wk26",-1097,12273],
+  [2025,"Wk27",-1277,10996],
+  [2025,"Wk28",1097,12093],
+  [2025,"Wk29",-495,11598],
+  [2025,"Wk30",-11,11587],
+  [2025,"Wk31",-2638,8949],
+  [2025,"Wk32",-1978,6971],
+  [2025,"Wk33",-2510,4461],
+  [2025,"Wk34",8847,13308],
+  [2025,"Wk37",1050,14358],
+  [2025,"Wk38",1610,15968],
+  [2025,"Wk39",329,16297],
+  [2025,"Wk40",-1947,14350],
+  [2025,"Wk41",-849,13501],
+  [2025,"Wk42",-1785,10868],
+  [2025,"Wk43",-309,10559],
+  [2025,"Wk44",-2043,8516],
+  [2025,"Wk45",-274,8242],
+  [2025,"Wk46",-2823,5419],
+  [2025,"Wk47",-517,4902],
+  [2025,"Wk48",-1366,3536],
+  [2025,"Wk49",-381,3155],
+  [2025,"Wk50",-646,2509],
+  [2025,"Wk51",-1253,1256],
+  [2025,"Wk52",-1041,215],
+  [2026,"Wk1",-847,-632],
+  [2026,"Wk2",-44,-676],
+  [2026,"Wk3",173,-503],
+  [2026,"Wk4",672,169],
+  [2026,"Wk5",237,406],
+  [2026,"Wk6",-1071,-665],
+  [2026,"Wk8",-546,-1211],
+  [2026,"Wk9",1016,-195],
+  [2026,"Wk11",-1042,-1237],
+  [2026,"Wk12",-1544,-2781],
+  [2026,"Wk13",1856,-925],
+  [2026,"Wk14",981,56],
+  [2026,"Wk15",-1635,-1579],
+  [2026,"Wk16",1106,-473],
+  [2026,"Wk17",-1613,-2086],
+  [2026,"Wk18",294,-1792],
+  [2026,"Wk19",1004,-788],
+  [2026,"Wk20",-2380,-3168],
+  [2026,"Wk21",-701,-3869],
+  [2026,"Wk22",300,-3569],
+  [2026,"Wk23",1008,-2561],
+  [2026,"Wk24",1158,-1403],
+  [2026,"Wk25",170,-1233],
+  [2026,"Wk26",-3665,-4898],
+  [2026,"Wk27",323,-4575],
+  [2026,"Wk28",1691,-2884],
+  [2026,"Wk29",-482,-3366],
+  [2026,"Wk30",1123,-2566],
+];
+
+function renderWeeklyHistoryTab() {
+  if (!WEEKLY_HISTORY.length) {
+    view.innerHTML = `<div class="empty-state"><div class="big">📝</div><p>还没有数据</p></div>`;
+    return;
+  }
+  const latest = WEEKLY_HISTORY[WEEKLY_HISTORY.length - 1];
+  const points = WEEKLY_HISTORY.map(w => ({ value: w[3], label: w[1], fullLabel: `${w[0]} ${w[1]}` }));
+  const groups = {};
+  WEEKLY_HISTORY.forEach(w => { (groups[w[0]] = groups[w[0]] || []).push(w); });
+  const years = Object.keys(groups).sort((a, b) => b - a);
+  view.innerHTML = `
+    <div class="stat-grid" style="margin-bottom:16px">
+      <div class="stat-tile">
+        <div class="label">最新合计 (${latest[0]} ${latest[1]})</div>
+        <div class="value ${latest[3] >= 0 ? "good" : "bad"}">${moneySigned(latest[3])}</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <h3 style="text-align:center">Weekly 历史曲线</h3>
+      <div class="chart-wrap" id="weeklyHistChartWrap"></div>
+    </div>
+    ${years.map(y => `
+      <div class="section-title">${y}</div>
+      ${groups[y].map(w => `
+        <div class="session-row">
+          <div class="session-main"><div class="title">${w[1]}</div></div>
+          <div class="session-side">
+            <div class="profit ${w[3] >= 0 ? "good" : "bad"}">${moneySigned(w[3])}</div>
+            ${w[2] != null ? `<div class="hourly">${moneySigned(w[2])} 本周</div>` : ""}
+          </div>
+        </div>`).join("")}
+    `).join("")}
+  `;
+  drawLineChart(document.getElementById("weeklyHistChartWrap"), points);
+}
+
 function renderNoteTab(key) {
+  if (key === "note1") { renderWeeklyHistoryTab(); return; }
   const tab = NOTE_TABS.find(t => t.key === key);
   view.innerHTML = `
     <div class="empty-state">
