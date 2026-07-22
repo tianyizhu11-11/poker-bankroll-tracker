@@ -104,6 +104,7 @@ body.modal-open {
   font-size: 17px;
 }
 .brand-mark { flex: none; }
+.brand.hidden { display: none; }
 .topbar-left { position: relative; display: flex; align-items: center; }
 .menu-dropdown {
   position: absolute;

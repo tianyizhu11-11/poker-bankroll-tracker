@@ -1335,7 +1335,7 @@ function renderWeeklyHistoryTab() {
   const latest = WEEKLY_HISTORY[WEEKLY_HISTORY.length - 1];
   const points = WEEKLY_HISTORY.map(w => ({ value: w[3], label: w[1], fullLabel: `${w[0]} ${w[1]}` }));
   const groups = {};
-  WEEKLY_HISTORY.forEach(w => { (groups[w[0]] = groups[w[0]] || []).push(w); });
+  [...WEEKLY_HISTORY].reverse().forEach(w => { (groups[w[0]] = groups[w[0]] || []).push(w); });
   const years = Object.keys(groups).sort((a, b) => b - a);
   view.innerHTML = `
     <div class="stat-grid" style="margin-bottom:16px">
@@ -1382,6 +1382,7 @@ function renderView() {
   document.querySelector(".tabbar").classList.toggle("hidden", activeSection !== "bankroll");
   document.getElementById("fab").classList.toggle("hidden", activeSection !== "bankroll");
   document.getElementById("importBtn").classList.toggle("hidden", activeSection !== "bankroll");
+  document.querySelector(".brand").classList.toggle("hidden", activeSection !== "bankroll");
   document.body.classList.toggle("no-tabbar", activeSection !== "bankroll");
 
   if (activeSection !== "bankroll") { renderNoteTab(activeSection); return; }
