@@ -11,6 +11,9 @@ async function ensureSchema(db) {
   await db.prepare(
     `CREATE TABLE IF NOT EXISTS daily_balance (date TEXT PRIMARY KEY, cash REAL, casino REAL)`
   ).run();
+  for (const col of ["cash2 REAL DEFAULT 0"]) {
+    try { await db.prepare(`ALTER TABLE daily_balance ADD COLUMN ${col}`).run(); } catch (e) { /* column already exists */ }
+  }
 }
 
 async function isAuthorized(request, env) {
@@ -76,7 +79,7 @@ async function handlePostWeekly(request, env) {
 
 async function handleGetDailyBalance(env) {
   const { results } = await env.DB.prepare(
-    "SELECT date, cash, casino FROM daily_balance ORDER BY date"
+    "SELECT date, cash, casino, cash2 FROM daily_balance ORDER BY date"
   ).all();
   return Response.json(results);
 }
@@ -87,8 +90,8 @@ async function handlePostDailyBalance(request, env) {
   const stmts = [env.DB.prepare("DELETE FROM daily_balance")];
   for (const r of rows) {
     stmts.push(
-      env.DB.prepare(`INSERT INTO daily_balance (date, cash, casino) VALUES (?, ?, ?)`)
-        .bind(String(r[0] || ""), +r[1] || 0, +r[2] || 0)
+      env.DB.prepare(`INSERT INTO daily_balance (date, cash, casino, cash2) VALUES (?, ?, ?, ?)`)
+        .bind(String(r[0] || ""), +r[1] || 0, +r[2] || 0, +r[3] || 0)
     );
   }
   const CHUNK = 100;

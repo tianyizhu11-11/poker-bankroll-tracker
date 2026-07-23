@@ -1432,7 +1432,7 @@ async function syncDailyBalanceFromServer() {
     const serverData = await res.json();
     if (!Array.isArray(serverData)) return;
     if (serverData.length > 0) {
-      DAILY_BALANCE = serverData.map(r => [r.date, r.cash, r.casino]);
+      DAILY_BALANCE = serverData.map(r => [r.date, r.cash, r.casino, r.cash2 || 0]);
       saveDailyBalance();
       if (activeSection === "note2") renderView();
     } else if (DAILY_BALANCE.length > 0) {
@@ -1440,13 +1440,13 @@ async function syncDailyBalanceFromServer() {
     }
   } catch (e) { /* offline: keep local cache */ }
 }
-function upsertDailyBalance(date, cash, casino) {
+function upsertDailyBalance(date, cash, casino, cash2) {
   const idx = DAILY_BALANCE.findIndex(r => r[0] === date);
-  if (idx >= 0) DAILY_BALANCE[idx] = [date, cash, casino];
+  if (idx >= 0) DAILY_BALANCE[idx] = [date, cash, casino, cash2];
   else {
     let insertAt = DAILY_BALANCE.findIndex(r => r[0] > date);
     if (insertAt === -1) insertAt = DAILY_BALANCE.length;
-    DAILY_BALANCE.splice(insertAt, 0, [date, cash, casino]);
+    DAILY_BALANCE.splice(insertAt, 0, [date, cash, casino, cash2]);
   }
   saveDailyBalance();
   syncDailyBalanceToServer();
@@ -1541,10 +1541,11 @@ function renderWeeklyHistoryTab() {
 function renderDailyBalanceTab() {
   const list = [...DAILY_BALANCE].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   const latest = list[list.length - 1];
-  const points = list.map(r => ({ date: r[0], label: r[0], cash: r[1], casino: r[2] }));
+  const points = list.map(r => ({ date: r[0], label: r[0], cash: r[1], casino: r[2], cash2: r[3] || 0 }));
   const series = [
     { key: "cash", label: "Cash", color: "var(--series-1)", visible: true },
     { key: "casino", label: "Casino", color: "var(--series-4)", visible: true },
+    { key: "cash2", label: "Cash2", color: "var(--series-2)", visible: true },
   ];
   const reversed = [...list].reverse();
   view.innerHTML = `
@@ -1558,6 +1559,10 @@ function renderDailyBalanceTab() {
         <div class="label">最新 Casino${latest ? " (" + latest[0] + ")" : ""}</div>
         <div class="value">${latest ? money(latest[2]) : "--"}</div>
       </div>
+      <div class="stat-tile">
+        <div class="label">最新 Cash2${latest ? " (" + latest[0] + ")" : ""}</div>
+        <div class="value">${latest ? money(latest[3] || 0) : "--"}</div>
+      </div>
     </div>
     ${list.length >= 2 ? `
     <div class="chart-card">
@@ -1566,6 +1571,7 @@ function renderDailyBalanceTab() {
       <div style="display:flex;justify-content:center;gap:14px;margin-top:10px;font-size:12.5px;font-weight:600">
         <span><span class="legend-dot" style="background:${series[0].color}"></span>${series[0].label}</span>
         <span><span class="legend-dot" style="background:${series[1].color}"></span>${series[1].label}</span>
+        <span><span class="legend-dot" style="background:${series[2].color}"></span>${series[2].label}</span>
       </div>
     </div>` : ""}
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
@@ -1576,7 +1582,7 @@ function renderDailyBalanceTab() {
         <div class="session-main"><div class="title">${r[0]}</div></div>
         <div class="session-side">
           <div class="profit">${money(r[1])}</div>
-          <div class="hourly">Casino ${money(r[2])}</div>
+          <div class="hourly">Casino ${money(r[2])} · Cash2 ${money(r[3] || 0)}</div>
         </div>
       </div>`).join("") : `<div class="empty-state"><div class="big">📝</div><p>还没有记录</p><p>点上面"+ 记一天"开始</p></div>`}
   `;
@@ -1592,13 +1598,14 @@ function openDailyBalanceSheet(date) {
   const initDate = existing ? existing[0] : todayStr();
   const initCash = existing ? existing[1] : "";
   const initCasino = existing ? existing[2] : "";
+  const initCash2 = existing ? existing[3] || "" : "";
   sheetEl.innerHTML = `
     <h2>${existing ? "编辑当日余额" : "记一天余额"}</h2>
     <div class="field">
       <label>日期</label>
       <input type="text" inputmode="numeric" id="db-date" value="${initDate}" placeholder="YYYY-MM-DD" />
     </div>
-    <div class="row2">
+    <div class="row3">
       <div class="field">
         <label>Cash</label>
         <input type="number" id="db-cash" value="${initCash}" placeholder="0" />
@@ -1606,6 +1613,10 @@ function openDailyBalanceSheet(date) {
       <div class="field">
         <label>Casino</label>
         <input type="number" id="db-casino" value="${initCasino}" placeholder="0" />
+      </div>
+      <div class="field">
+        <label>Cash2</label>
+        <input type="number" id="db-cash2" value="${initCash2}" placeholder="0" />
       </div>
     </div>
     <div class="btn-row">
@@ -1621,8 +1632,9 @@ function openDailyBalanceSheet(date) {
     const d = document.getElementById("db-date").value || todayStr();
     const cash = +document.getElementById("db-cash").value || 0;
     const casino = +document.getElementById("db-casino").value || 0;
+    const cash2 = +document.getElementById("db-cash2").value || 0;
     if (existing && existing[0] !== d) deleteDailyBalance(existing[0]);
-    upsertDailyBalance(d, cash, casino);
+    upsertDailyBalance(d, cash, casino, cash2);
     closeSheet();
     renderView();
   });
