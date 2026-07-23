@@ -1665,7 +1665,6 @@ function renderView() {
   document.querySelectorAll(".menu-item").forEach(b => b.classList.toggle("active", b.dataset.section === activeSection));
   document.querySelector(".tabbar").classList.toggle("hidden", activeSection !== "bankroll");
   document.getElementById("fab").classList.toggle("hidden", activeSection !== "bankroll");
-  document.getElementById("importBtn").classList.toggle("hidden", activeSection !== "bankroll");
   document.querySelector(".brand").classList.toggle("hidden", activeSection !== "bankroll");
   document.body.classList.toggle("no-tabbar", activeSection !== "bankroll");
 
