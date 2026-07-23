@@ -1575,6 +1575,10 @@ function renderDailyBalanceTab() {
         <div class="label">最新 Cash2${latest ? " (" + latest[0] + ")" : ""}</div>
         <div class="value">${latest ? money(latest[3] || 0) : "--"}</div>
       </div>
+      <div class="stat-tile">
+        <div class="label">Cash + Cash2 总和${latest ? " (" + latest[0] + ")" : ""}</div>
+        <div class="value">${latest ? money(latest[1] + (latest[3] || 0)) : "--"}</div>
+      </div>
     </div>
     ${list.length >= 2 ? `
     <div class="chart-card">
