@@ -1601,11 +1601,11 @@ function openDailyBalanceSheet(date) {
     <div class="row2">
       <div class="field">
         <label>Cash</label>
-        <input type="number" inputmode="decimal" id="db-cash" value="${initCash}" placeholder="0" />
+        <input type="number" id="db-cash" value="${initCash}" placeholder="0" />
       </div>
       <div class="field">
         <label>Casino</label>
-        <input type="number" inputmode="decimal" id="db-casino" value="${initCasino}" placeholder="0" />
+        <input type="number" id="db-casino" value="${initCasino}" placeholder="0" />
       </div>
     </div>
     <div class="btn-row">
