@@ -11,7 +11,8 @@ const DAILY_BALANCE_API_URL = "/api/daily-balance";
 const VB_W = 300, VB_H = 150;
 const PAD = { l: 8, r: 8, t: 14, b: 10 };
 
-let sessions = loadSessions();
+let allSessions = loadSessions();
+let sessions = allSessions;
 let activeTab = "overview";
 let activeSection = "bankroll";
 let editingId = null;
@@ -22,6 +23,17 @@ let trendsRange = "max";
 let trendsVisible = { cash: true, tourn: true, total: true };
 let WEEKLY_HISTORY = [];
 let DAILY_BALANCE = [];
+function defaultSessionFilter() {
+  return {
+    types: [], games: [], locations: [],
+    recentDays: null, dateFrom: "", dateTo: "",
+    notesQuery: "",
+    buyInMin: null, buyInMax: null,
+    profitMin: null, profitMax: null,
+    outcome: "all",
+  };
+}
+let sessionFilter = defaultSessionFilter();
 
 // ---------- storage ----------
 function loadSessions() {
@@ -31,7 +43,7 @@ function loadSessions() {
   } catch (e) { return []; }
 }
 function saveSessions() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(allSessions));
   syncToServer();
 }
 function uid() {
@@ -51,7 +63,7 @@ let syncInFlight = null;
 function syncToServer() {
   const token = getAuthToken();
   if (!token) return;
-  const payload = JSON.stringify(sessions);
+  const payload = JSON.stringify(allSessions);
   syncInFlight = fetch(API_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
@@ -77,15 +89,15 @@ async function syncFromServer() {
     const serverData = await res.json();
     if (!Array.isArray(serverData)) return;
     if (serverData.length > 0) {
-      sessions = serverData.map(s => ({
+      allSessions = serverData.map(s => ({
         id: s.id, date: s.date, gameType: s.gameType, game: s.game || "", stakes: s.stakes, location: s.location,
         startTime: s.startTime, endTime: s.endTime, endDate: s.endDate || "", buyIn: s.buyIn, rebuy: s.rebuy,
         cashOut: s.cashOut, expenses: s.expenses, notes: s.notes,
         bigBlind: s.bigBlind || 0, place: s.place || 0, bounties: s.bounties || 0, players: s.players || 0,
       }));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(allSessions));
       renderView();
-    } else if (sessions.length > 0) {
+    } else if (allSessions.length > 0) {
       syncToServer();
     }
   } catch (e) { /* offline: keep local cache */ }
@@ -1660,13 +1672,59 @@ function renderNoteTab(key) {
 
 const SECTIONS = [{ key: "bankroll", label: "扑克资金记录" }, ...NOTE_TABS];
 
+function isFilterActive() {
+  const f = sessionFilter;
+  return f.types.length > 0 || f.games.length > 0 || f.locations.length > 0 ||
+    f.recentDays != null || !!f.dateFrom || !!f.dateTo || !!f.notesQuery ||
+    f.buyInMin != null || f.buyInMax != null || f.profitMin != null || f.profitMax != null ||
+    f.outcome !== "all";
+}
+function resetSessionFilter() { sessionFilter = defaultSessionFilter(); }
+
+function applySessionFilter(list) {
+  const f = sessionFilter;
+  let out = list;
+  if (f.types.length) out = out.filter(s => f.types.includes(s.gameType || ""));
+  if (f.games.length) out = out.filter(s => f.games.includes(s.game || ""));
+  if (f.locations.length) out = out.filter(s => f.locations.includes((s.location || "").trim() || "未知地点"));
+  if (f.recentDays != null) {
+    const cutoff = new Date(Date.now() - f.recentDays * 24 * 3600 * 1000);
+    const cutoffStr = cutoff.getFullYear() + "-" + String(cutoff.getMonth() + 1).padStart(2, "0") + "-" + String(cutoff.getDate()).padStart(2, "0");
+    out = out.filter(s => s.date && s.date >= cutoffStr);
+  } else {
+    if (f.dateFrom) out = out.filter(s => s.date && s.date >= f.dateFrom);
+    if (f.dateTo) out = out.filter(s => s.date && s.date <= f.dateTo);
+  }
+  if (f.notesQuery) {
+    const q = f.notesQuery.trim().toLowerCase();
+    if (q) out = out.filter(s => (s.notes || "").toLowerCase().includes(q));
+  }
+  if (f.buyInMin != null) out = out.filter(s => (+s.buyIn || 0) >= f.buyInMin);
+  if (f.buyInMax != null) out = out.filter(s => (+s.buyIn || 0) <= f.buyInMax);
+  if (f.profitMin != null || f.profitMax != null || f.outcome !== "all") {
+    out = out.filter(s => {
+      const p = computeMetrics(s).profit;
+      if (f.profitMin != null && p < f.profitMin) return false;
+      if (f.profitMax != null && p > f.profitMax) return false;
+      if (f.outcome === "win" && p <= 0) return false;
+      if (f.outcome === "loss" && p >= 0) return false;
+      return true;
+    });
+  }
+  return out;
+}
+
 function renderView() {
+  sessions = applySessionFilter(allSessions);
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === activeTab));
   document.querySelectorAll(".menu-item").forEach(b => b.classList.toggle("active", b.dataset.section === activeSection));
   document.querySelector(".tabbar").classList.toggle("hidden", activeSection !== "bankroll");
   document.getElementById("fab").classList.toggle("hidden", activeSection !== "bankroll");
   document.querySelector(".brand").classList.toggle("hidden", activeSection !== "bankroll");
   document.body.classList.toggle("no-tabbar", activeSection !== "bankroll");
+  const filterBtnEl = document.getElementById("filterBtn");
+  filterBtnEl.classList.toggle("hidden", activeSection !== "bankroll");
+  filterBtnEl.classList.toggle("active", isFilterActive());
 
   if (activeSection !== "bankroll") { renderNoteTab(activeSection); return; }
 
@@ -1675,6 +1733,14 @@ function renderView() {
   else if (activeTab === "charts") renderCharts();
   else if (activeTab === "trends") renderTrends();
   else renderSessions();
+
+  if (isFilterActive()) {
+    const banner = document.createElement("div");
+    banner.className = "filter-banner";
+    banner.innerHTML = `<span>筛选中 · ${sessions.length}/${allSessions.length} 条记录</span><button id="clearFilterBtn">清除筛选</button>`;
+    view.prepend(banner);
+    document.getElementById("clearFilterBtn").addEventListener("click", () => { resetSessionFilter(); renderView(); });
+  }
 }
 
 // ---------- tabs & fab ----------
@@ -1759,7 +1825,7 @@ function autoFormatTimeInput(el) {
 }
 
 function openSessionDetail(id) {
-  const s = sessions.find(x => x.id === id);
+  const s = allSessions.find(x => x.id === id);
   if (!s) return;
   const m = computeMetrics(s);
   const title = [s.gameType, s.game, s.stakes].filter(Boolean).join(" · ") || "未命名场次";
@@ -1803,7 +1869,7 @@ function openSessionDetail(id) {
 
 function getKnownLocations() {
   const counts = new Map();
-  sessions.forEach(s => {
+  allSessions.forEach(s => {
     const name = (s.location || "").trim();
     if (!name) return;
     counts.set(name, (counts.get(name) || 0) + 1);
@@ -1875,7 +1941,7 @@ function setupLocationAutocomplete() {
 
 function openSheet(id) {
   editingId = id;
-  const s = id ? sessions.find(x => x.id === id) : {
+  const s = id ? allSessions.find(x => x.id === id) : {
     id: uid(), date: todayStr(), gameType: "现金游戏", game: "No Limit Texas Hold'em", stakes: "", location: "",
     startTime: "", endTime: "", endDate: "", buyIn: "", rebuy: "", cashOut: "", expenses: "", notes: "",
   };
@@ -1990,10 +2056,10 @@ function openSheet(id) {
   document.getElementById("btn-cancel").addEventListener("click", closeSheet);
   document.getElementById("btn-save").addEventListener("click", () => {
     const data = readForm();
-    const idx = sessions.findIndex(x => x.id === data.id);
+    const idx = allSessions.findIndex(x => x.id === data.id);
     const isNew = idx < 0;
-    const oldData = isNew ? null : sessions[idx];
-    if (idx >= 0) sessions[idx] = data; else sessions.push(data);
+    const oldData = isNew ? null : allSessions[idx];
+    if (idx >= 0) allSessions[idx] = data; else allSessions.push(data);
     saveSessions();
     if (isNew) {
       applySessionToWeeklyHistory(data.date, computeMetrics(data).profit);
@@ -2006,10 +2072,10 @@ function openSheet(id) {
   });
   const delBtn = document.getElementById("btn-delete");
   if (delBtn) delBtn.addEventListener("click", () => {
-    const idx = sessions.findIndex(x => x.id === s.id);
+    const idx = allSessions.findIndex(x => x.id === s.id);
     if (idx >= 0) {
-      lastDeleted = { data: sessions[idx], idx };
-      sessions.splice(idx, 1);
+      lastDeleted = { data: allSessions[idx], idx };
+      allSessions.splice(idx, 1);
       saveSessions();
       applySessionToWeeklyHistory(lastDeleted.data.date, -computeMetrics(lastDeleted.data).profit);
       closeSheet();
@@ -2038,7 +2104,7 @@ function showUndoToast(message) {
   toastEl.classList.remove("hidden");
   document.getElementById("undoBtn").addEventListener("click", () => {
     if (lastDeleted) {
-      sessions.splice(lastDeleted.idx, 0, lastDeleted.data);
+      allSessions.splice(lastDeleted.idx, 0, lastDeleted.data);
       saveSessions();
       applySessionToWeeklyHistory(lastDeleted.data.date, computeMetrics(lastDeleted.data).profit);
       renderView();
@@ -2150,6 +2216,134 @@ function pbtRowsToSessions(rows) {
   });
 }
 
+function openFilterSheet() {
+  const draft = JSON.parse(JSON.stringify(sessionFilter));
+  const allTypes = [...new Set(allSessions.map(s => s.gameType).filter(Boolean))].sort();
+  const allGames = [...new Set(allSessions.map(s => s.game).filter(Boolean))].sort();
+  const allLocations = [...new Set(allSessions.map(s => (s.location || "").trim() || "未知地点"))].sort();
+
+  function chipListHTML(groupKey, values, selected) {
+    if (!values.length) return `<div style="font-size:12.5px;color:var(--text-muted)">暂无数据</div>`;
+    return values.map(v => `<button type="button" class="filter-chip${selected.includes(v) ? " active" : ""}" data-group="${groupKey}" data-value="${escapeHtml(v)}">${escapeHtml(v)}</button>`).join("");
+  }
+
+  sheetEl.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h2 style="margin:0">筛选记录</h2>
+      <button id="filter-close" style="background:none;border:none;font-size:24px;color:var(--series-1);line-height:1;padding:4px">&times;</button>
+    </div>
+    <div class="field">
+      <label>类型</label>
+      <div class="filter-chip-row" id="chips-types">${chipListHTML("types", allTypes, draft.types)}</div>
+    </div>
+    <div class="field">
+      <label>游戏</label>
+      <div class="filter-chip-row" id="chips-games">${chipListHTML("games", allGames, draft.games)}</div>
+    </div>
+    <div class="field">
+      <label>位置</label>
+      <div class="filter-chip-row" id="chips-locations">${chipListHTML("locations", allLocations, draft.locations)}</div>
+    </div>
+    <div class="field">
+      <label>日期范围</label>
+      <div class="filter-chip-row" id="chips-recent">
+        ${[["7", "最近7天"], ["30", "最近30天"], ["90", "最近90天"], ["365", "最近1年"]].map(([d, l]) => `<button type="button" class="filter-chip${String(draft.recentDays) === d ? " active" : ""}" data-recent="${d}">${l}</button>`).join("")}
+      </div>
+      <div class="row2" style="margin-top:8px">
+        <input type="text" inputmode="numeric" id="filter-date-from" placeholder="开始 YYYY-MM-DD" value="${draft.dateFrom || ""}" />
+        <input type="text" inputmode="numeric" id="filter-date-to" placeholder="结束 YYYY-MM-DD" value="${draft.dateTo || ""}" />
+      </div>
+    </div>
+    <div class="field">
+      <label>备注关键词</label>
+      <input type="text" id="filter-notes" placeholder="搜索备注内容" value="${escapeHtml(draft.notesQuery || "")}" />
+    </div>
+    <div class="field">
+      <label>Buy-In 范围</label>
+      <div class="row2">
+        <input type="number" id="filter-buyin-min" placeholder="最小" value="${draft.buyInMin ?? ""}" />
+        <input type="number" id="filter-buyin-max" placeholder="最大" value="${draft.buyInMax ?? ""}" />
+      </div>
+    </div>
+    <div class="field">
+      <label>盈亏范围</label>
+      <div class="row2">
+        <input type="number" id="filter-profit-min" placeholder="最小" value="${draft.profitMin ?? ""}" />
+        <input type="number" id="filter-profit-max" placeholder="最大" value="${draft.profitMax ?? ""}" />
+      </div>
+    </div>
+    <div class="field">
+      <label>结果</label>
+      <div class="metric-toggle">
+        <button type="button" class="metric-toggle-btn${draft.outcome === "all" ? " active" : ""}" data-outcome="all">全部</button>
+        <button type="button" class="metric-toggle-btn${draft.outcome === "win" ? " active" : ""}" data-outcome="win">只看赢局</button>
+        <button type="button" class="metric-toggle-btn${draft.outcome === "loss" ? " active" : ""}" data-outcome="loss">只看输局</button>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="filter-reset">重置</button>
+      <button class="btn btn-primary" id="filter-apply">应用筛选</button>
+    </div>
+  `;
+  showOverlay();
+  autoFormatDateInput(document.getElementById("filter-date-from"));
+  autoFormatDateInput(document.getElementById("filter-date-to"));
+  document.getElementById("filter-close").addEventListener("click", closeSheet);
+
+  function bindChipGroup(containerId, groupField) {
+    document.getElementById(containerId).querySelectorAll(".filter-chip").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const v = btn.dataset.value;
+        const idx = draft[groupField].indexOf(v);
+        if (idx >= 0) draft[groupField].splice(idx, 1); else draft[groupField].push(v);
+        btn.classList.toggle("active");
+      });
+    });
+  }
+  bindChipGroup("chips-types", "types");
+  bindChipGroup("chips-games", "games");
+  bindChipGroup("chips-locations", "locations");
+
+  document.getElementById("chips-recent").querySelectorAll(".filter-chip").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const d = Number(btn.dataset.recent);
+      draft.recentDays = draft.recentDays === d ? null : d;
+      document.getElementById("chips-recent").querySelectorAll(".filter-chip").forEach(b => b.classList.toggle("active", Number(b.dataset.recent) === draft.recentDays));
+    });
+  });
+
+  sheetEl.querySelectorAll("[data-outcome]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      draft.outcome = btn.dataset.outcome;
+      sheetEl.querySelectorAll("[data-outcome]").forEach(b => b.classList.toggle("active", b.dataset.outcome === draft.outcome));
+    });
+  });
+
+  document.getElementById("filter-reset").addEventListener("click", () => {
+    resetSessionFilter();
+    closeSheet();
+    renderView();
+  });
+  document.getElementById("filter-apply").addEventListener("click", () => {
+    draft.dateFrom = document.getElementById("filter-date-from").value.trim();
+    draft.dateTo = document.getElementById("filter-date-to").value.trim();
+    draft.notesQuery = document.getElementById("filter-notes").value.trim();
+    const bMin = document.getElementById("filter-buyin-min").value;
+    const bMax = document.getElementById("filter-buyin-max").value;
+    const pMin = document.getElementById("filter-profit-min").value;
+    const pMax = document.getElementById("filter-profit-max").value;
+    draft.buyInMin = bMin === "" ? null : +bMin;
+    draft.buyInMax = bMax === "" ? null : +bMax;
+    draft.profitMin = pMin === "" ? null : +pMin;
+    draft.profitMax = pMax === "" ? null : +pMax;
+    sessionFilter = draft;
+    closeSheet();
+    renderView();
+  });
+}
+const filterBtn = document.getElementById("filterBtn");
+filterBtn.addEventListener("click", () => openFilterSheet());
+
 const importBtn = document.getElementById("importBtn");
 const importFile = document.getElementById("importFile");
 importBtn.addEventListener("click", () => importFile.click());
@@ -2178,7 +2372,7 @@ function confirmImport(imported) {
     <h2>导入数据</h2>
     <p style="color:var(--text-secondary);font-size:14px;line-height:1.6">
       检测到 <strong>${imported.length}</strong> 条记录。<br/>
-      导入将<strong style="color:var(--critical)">清空当前全部 ${sessions.length} 条记录</strong>并替换为这些数据,此操作不可撤销。
+      导入将<strong style="color:var(--critical)">清空当前全部 ${allSessions.length} 条记录</strong>并替换为这些数据,此操作不可撤销。
     </p>
     <div class="btn-row">
       <button class="btn btn-secondary" id="btn-import-cancel">取消</button>
@@ -2188,7 +2382,7 @@ function confirmImport(imported) {
   showOverlay();
   document.getElementById("btn-import-cancel").addEventListener("click", closeSheet);
   document.getElementById("btn-import-confirm").addEventListener("click", () => {
-    sessions = imported;
+    allSessions = imported;
     saveSessions();
     closeSheet();
     activeTab = "sessions";

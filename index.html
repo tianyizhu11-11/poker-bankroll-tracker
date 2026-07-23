@@ -29,9 +29,14 @@
     </svg>
     <span>扑克资金记录</span>
   </div>
-  <button id="importBtn" class="icon-btn hidden" aria-label="导入CSV" title="导入CSV">
-    <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 3 V15 M12 15 L7 10 M12 15 L17 10 M4 19 H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
-  </button>
+  <div class="topbar-right">
+    <button id="filterBtn" class="icon-btn" aria-label="筛选" title="筛选">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 6H20 M7 12H17 M10 18H14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/><circle cx="8" cy="6" r="1.6" fill="currentColor"/><circle cx="16" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="18" r="1.6" fill="currentColor"/></svg>
+    </button>
+    <button id="importBtn" class="icon-btn hidden" aria-label="导入CSV" title="导入CSV">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 3 V15 M12 15 L7 10 M12 15 L17 10 M4 19 H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+    </button>
+  </div>
   <input type="file" id="importFile" accept=".csv,text/csv" style="display:none" />
 </header>
 
