@@ -6,6 +6,8 @@ const AUTH_KEY = "pbt_auth_token";
 const API_URL = "/api/sessions";
 const WEEKLY_STORAGE_KEY = "pbt_weekly_history_v1";
 const WEEKLY_API_URL = "/api/weekly-history";
+const DAILY_BALANCE_STORAGE_KEY = "pbt_daily_balance_v1";
+const DAILY_BALANCE_API_URL = "/api/daily-balance";
 const VB_W = 300, VB_H = 150;
 const PAD = { l: 8, r: 8, t: 14, b: 10 };
 
@@ -19,6 +21,7 @@ let chartsDurationMetric = "profit";
 let trendsRange = "max";
 let trendsVisible = { cash: true, tourn: true, total: true };
 let WEEKLY_HISTORY = [];
+let DAILY_BALANCE = [];
 
 // ---------- storage ----------
 function loadSessions() {
@@ -1237,7 +1240,7 @@ function escapeHtml(str) {
 // ---------- note tabs (via top-left dropdown menu) ----------
 const NOTE_TABS = [
   { key: "note1", label: "Weekly 历史" },
-  { key: "note2", label: "笔记 2" },
+  { key: "note2", label: "每日余额" },
   { key: "note3", label: "笔记 3" },
 ];
 
@@ -1394,6 +1397,67 @@ async function syncWeeklyHistoryFromServer() {
   } catch (e) { /* offline: keep local cache */ }
 }
 
+function loadDailyBalance() {
+  try {
+    const raw = localStorage.getItem(DAILY_BALANCE_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* ignore */ }
+  return [];
+}
+function saveDailyBalance() {
+  localStorage.setItem(DAILY_BALANCE_STORAGE_KEY, JSON.stringify(DAILY_BALANCE));
+}
+DAILY_BALANCE = loadDailyBalance();
+
+function syncDailyBalanceToServer() {
+  const token = getAuthToken();
+  if (!token) return;
+  fetch(DAILY_BALANCE_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: JSON.stringify(DAILY_BALANCE),
+  }).then(res => {
+    if (res.status === 401) {
+      localStorage.removeItem(AUTH_KEY);
+      showToast("密码错误,每日余额仅保存在本机");
+    } else if (!res.ok) {
+      showToast("每日余额同步失败,数据已保存在本机");
+    }
+  }).catch(() => { showToast("网络异常,每日余额已保存在本机"); });
+}
+async function syncDailyBalanceFromServer() {
+  try {
+    const res = await fetch(DAILY_BALANCE_API_URL);
+    if (!res.ok) return;
+    const serverData = await res.json();
+    if (!Array.isArray(serverData)) return;
+    if (serverData.length > 0) {
+      DAILY_BALANCE = serverData.map(r => [r.date, r.cash, r.casino]);
+      saveDailyBalance();
+      if (activeSection === "note2") renderView();
+    } else if (DAILY_BALANCE.length > 0) {
+      syncDailyBalanceToServer();
+    }
+  } catch (e) { /* offline: keep local cache */ }
+}
+function upsertDailyBalance(date, cash, casino) {
+  const idx = DAILY_BALANCE.findIndex(r => r[0] === date);
+  if (idx >= 0) DAILY_BALANCE[idx] = [date, cash, casino];
+  else {
+    let insertAt = DAILY_BALANCE.findIndex(r => r[0] > date);
+    if (insertAt === -1) insertAt = DAILY_BALANCE.length;
+    DAILY_BALANCE.splice(insertAt, 0, [date, cash, casino]);
+  }
+  saveDailyBalance();
+  syncDailyBalanceToServer();
+}
+function deleteDailyBalance(date) {
+  const idx = DAILY_BALANCE.findIndex(r => r[0] === date);
+  if (idx >= 0) DAILY_BALANCE.splice(idx, 1);
+  saveDailyBalance();
+  syncDailyBalanceToServer();
+}
+
 // ISO-8601 week (Monday-start) — matches the week numbering used in the Casino Weekly ledger
 function isoWeekOf(dateStr) {
   const d = new Date(dateStr + "T00:00:00Z");
@@ -1474,8 +1538,105 @@ function renderWeeklyHistoryTab() {
   drawLineChart(document.getElementById("weeklyHistChartWrap"), points, { dashed: true, xTicks });
 }
 
+function renderDailyBalanceTab() {
+  const list = [...DAILY_BALANCE].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  const latest = list[list.length - 1];
+  const points = list.map(r => ({ date: r[0], label: r[0], cash: r[1], casino: r[2] }));
+  const series = [
+    { key: "cash", label: "Cash", color: "var(--series-1)", visible: true },
+    { key: "casino", label: "Casino", color: "var(--series-4)", visible: true },
+  ];
+  const reversed = [...list].reverse();
+  view.innerHTML = `
+    <h2 style="margin:0 0 14px">每日余额</h2>
+    <div class="stat-grid" style="margin-bottom:16px">
+      <div class="stat-tile">
+        <div class="label">最新 Cash${latest ? " (" + latest[0] + ")" : ""}</div>
+        <div class="value">${latest ? money(latest[1]) : "--"}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">最新 Casino${latest ? " (" + latest[0] + ")" : ""}</div>
+        <div class="value">${latest ? money(latest[2]) : "--"}</div>
+      </div>
+    </div>
+    ${list.length >= 2 ? `
+    <div class="chart-card">
+      <h3 style="text-align:center">每日余额曲线</h3>
+      <div class="chart-wrap" id="dailyBalanceChartWrap"></div>
+      <div style="display:flex;justify-content:center;gap:14px;margin-top:10px;font-size:12.5px;font-weight:600">
+        <span><span class="legend-dot" style="background:${series[0].color}"></span>${series[0].label}</span>
+        <span><span class="legend-dot" style="background:${series[1].color}"></span>${series[1].label}</span>
+      </div>
+    </div>` : ""}
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+      <button class="btn btn-primary" id="db-add-btn" style="padding:8px 16px;font-size:14px;width:auto">+ 记一天</button>
+    </div>
+    ${reversed.length ? reversed.map(r => `
+      <div class="session-row" data-db-date="${r[0]}">
+        <div class="session-main"><div class="title">${r[0]}</div></div>
+        <div class="session-side">
+          <div class="profit">${money(r[1])}</div>
+          <div class="hourly">Casino ${money(r[2])}</div>
+        </div>
+      </div>`).join("") : `<div class="empty-state"><div class="big">📝</div><p>还没有记录</p><p>点上面"+ 记一天"开始</p></div>`}
+  `;
+  if (list.length >= 2) drawMultiLineChart(document.getElementById("dailyBalanceChartWrap"), points, series);
+  document.getElementById("db-add-btn").addEventListener("click", () => openDailyBalanceSheet(null));
+  view.querySelectorAll("[data-db-date]").forEach(row => {
+    row.addEventListener("click", () => openDailyBalanceSheet(row.dataset.dbDate));
+  });
+}
+
+function openDailyBalanceSheet(date) {
+  const existing = date ? DAILY_BALANCE.find(r => r[0] === date) : null;
+  const initDate = existing ? existing[0] : todayStr();
+  const initCash = existing ? existing[1] : "";
+  const initCasino = existing ? existing[2] : "";
+  sheetEl.innerHTML = `
+    <h2>${existing ? "编辑当日余额" : "记一天余额"}</h2>
+    <div class="field">
+      <label>日期</label>
+      <input type="text" inputmode="numeric" id="db-date" value="${initDate}" placeholder="YYYY-MM-DD" />
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label>Cash</label>
+        <input type="number" inputmode="decimal" id="db-cash" value="${initCash}" placeholder="0" />
+      </div>
+      <div class="field">
+        <label>Casino</label>
+        <input type="number" inputmode="decimal" id="db-casino" value="${initCasino}" placeholder="0" />
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="db-cancel">取消</button>
+      <button class="btn btn-primary" id="db-save">保存</button>
+    </div>
+    ${existing ? '<div class="btn-row"><button class="btn btn-danger" id="db-delete">删除这条记录</button></div>' : ""}
+  `;
+  showOverlay();
+  autoFormatDateInput(document.getElementById("db-date"));
+  document.getElementById("db-cancel").addEventListener("click", closeSheet);
+  document.getElementById("db-save").addEventListener("click", () => {
+    const d = document.getElementById("db-date").value || todayStr();
+    const cash = +document.getElementById("db-cash").value || 0;
+    const casino = +document.getElementById("db-casino").value || 0;
+    if (existing && existing[0] !== d) deleteDailyBalance(existing[0]);
+    upsertDailyBalance(d, cash, casino);
+    closeSheet();
+    renderView();
+  });
+  const delBtn = document.getElementById("db-delete");
+  if (delBtn) delBtn.addEventListener("click", () => {
+    deleteDailyBalance(existing[0]);
+    closeSheet();
+    renderView();
+  });
+}
+
 function renderNoteTab(key) {
   if (key === "note1") { renderWeeklyHistoryTab(); return; }
+  if (key === "note2") { renderDailyBalanceTab(); return; }
   const tab = NOTE_TABS.find(t => t.key === key);
   view.innerHTML = `
     <div class="empty-state">
@@ -2029,4 +2190,5 @@ function confirmImport(imported) {
 renderView();
 syncFromServer();
 syncWeeklyHistoryFromServer();
+syncDailyBalanceFromServer();
 })();

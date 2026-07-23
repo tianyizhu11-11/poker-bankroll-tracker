@@ -8,6 +8,9 @@ async function ensureSchema(db) {
   await db.prepare(
     `CREATE TABLE IF NOT EXISTS weekly_history (idx INTEGER PRIMARY KEY, year INTEGER, label TEXT, weekNet REAL, total REAL)`
   ).run();
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS daily_balance (date TEXT PRIMARY KEY, cash REAL, casino REAL)`
+  ).run();
 }
 
 async function isAuthorized(request, env) {
@@ -71,6 +74,30 @@ async function handlePostWeekly(request, env) {
   return Response.json({ ok: true, count: rows.length });
 }
 
+async function handleGetDailyBalance(env) {
+  const { results } = await env.DB.prepare(
+    "SELECT date, cash, casino FROM daily_balance ORDER BY date"
+  ).all();
+  return Response.json(results);
+}
+
+async function handlePostDailyBalance(request, env) {
+  const rows = await request.json();
+  if (!Array.isArray(rows)) return new Response("Expected an array", { status: 400 });
+  const stmts = [env.DB.prepare("DELETE FROM daily_balance")];
+  for (const r of rows) {
+    stmts.push(
+      env.DB.prepare(`INSERT INTO daily_balance (date, cash, casino) VALUES (?, ?, ?)`)
+        .bind(String(r[0] || ""), +r[1] || 0, +r[2] || 0)
+    );
+  }
+  const CHUNK = 100;
+  for (let i = 0; i < stmts.length; i += CHUNK) {
+    await env.DB.batch(stmts.slice(i, i + CHUNK));
+  }
+  return Response.json({ ok: true, count: rows.length });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -102,6 +129,23 @@ export default {
             return new Response("Unauthorized", { status: 401 });
           }
           return handlePostWeekly(request, env);
+        }
+        return new Response("Method not allowed", { status: 405 });
+      } catch (err) {
+        return new Response("Server error", { status: 500 });
+      }
+    }
+
+    if (url.pathname === "/api/daily-balance") {
+      try {
+        await ensureSchema(env.DB);
+
+        if (request.method === "GET") return handleGetDailyBalance(env);
+        if (request.method === "POST") {
+          if (!(await isAuthorized(request, env))) {
+            return new Response("Unauthorized", { status: 401 });
+          }
+          return handlePostDailyBalance(request, env);
         }
         return new Response("Method not allowed", { status: 405 });
       } catch (err) {
