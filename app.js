@@ -1609,19 +1609,21 @@ function renderDailyBalanceTab() {
   });
 }
 
-function prevCasinoBalance(beforeDate, excludeDate) {
+function prevDailyBalanceValue(beforeDate, excludeDate, colIndex) {
   const list = DAILY_BALANCE
     .filter(r => r[0] < beforeDate && r[0] !== excludeDate)
     .sort((a, b) => (a[0] < b[0] ? -1 : 1));
-  return list.length ? list[list.length - 1][2] : 0;
+  return list.length ? list[list.length - 1][colIndex] || 0 : 0;
 }
 
 function openDailyBalanceSheet(date) {
   const existing = date ? DAILY_BALANCE.find(r => r[0] === date) : null;
   const initDate = existing ? existing[0] : todayStr();
-  const initCash = existing ? existing[1] : "";
   const initCash2 = existing ? existing[3] || "" : "";
-  const prevCasino = prevCasinoBalance(initDate, existing ? existing[0] : null);
+  const excludeDate = existing ? existing[0] : null;
+  const prevCash = prevDailyBalanceValue(initDate, excludeDate, 1);
+  const prevCasino = prevDailyBalanceValue(initDate, excludeDate, 2);
+  const initCashDelta = existing ? existing[1] - prevCash : "";
   const initCasinoDelta = existing ? existing[2] - prevCasino : "";
   sheetEl.innerHTML = `
     <h2>${existing ? "编辑当日余额" : "记一天余额"}</h2>
@@ -1631,8 +1633,8 @@ function openDailyBalanceSheet(date) {
     </div>
     <div class="row3">
       <div class="field">
-        <label>Cash</label>
-        <input type="number" id="db-cash" value="${initCash}" placeholder="0" />
+        <label>Cash 变动 (+/-)</label>
+        <input type="number" id="db-cash" value="${initCashDelta}" placeholder="0" />
       </div>
       <div class="field">
         <label>Casino 变动 (+/-)</label>
@@ -1643,6 +1645,7 @@ function openDailyBalanceSheet(date) {
         <input type="number" id="db-cash2" value="${initCash2}" placeholder="0" />
       </div>
     </div>
+    <div style="font-size:12.5px;color:var(--text-muted);margin:-8px 0 16px;text-align:right" id="db-cash-hint"></div>
     <div style="font-size:12.5px;color:var(--text-muted);margin:-8px 0 16px;text-align:right" id="db-casino-hint"></div>
     <div class="btn-row">
       <button class="btn btn-secondary" id="db-cancel">取消</button>
@@ -1652,6 +1655,14 @@ function openDailyBalanceSheet(date) {
   `;
   showOverlay();
   autoFormatDateInput(document.getElementById("db-date"));
+  const cashInput = document.getElementById("db-cash");
+  const cashHint = document.getElementById("db-cash-hint");
+  const updateCashHint = () => {
+    const delta = +cashInput.value || 0;
+    cashHint.textContent = `上次 ${money(prevCash)} → 本次 ${money(prevCash + delta)}`;
+  };
+  cashInput.addEventListener("input", updateCashHint);
+  updateCashHint();
   const casinoInput = document.getElementById("db-casino");
   const casinoHint = document.getElementById("db-casino-hint");
   const updateCasinoHint = () => {
@@ -1663,7 +1674,8 @@ function openDailyBalanceSheet(date) {
   document.getElementById("db-cancel").addEventListener("click", closeSheet);
   document.getElementById("db-save").addEventListener("click", () => {
     const d = document.getElementById("db-date").value || todayStr();
-    const cash = +document.getElementById("db-cash").value || 0;
+    const cashDelta = +document.getElementById("db-cash").value || 0;
+    const cash = prevCash + cashDelta;
     const casinoDelta = +document.getElementById("db-casino").value || 0;
     const casino = prevCasino + casinoDelta;
     const cash2 = +document.getElementById("db-cash2").value || 0;
