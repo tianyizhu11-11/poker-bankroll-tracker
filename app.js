@@ -1659,7 +1659,7 @@ function openDailyBalanceSheet(date) {
   const cashHint = document.getElementById("db-cash-hint");
   const updateCashHint = () => {
     const delta = +cashInput.value || 0;
-    cashHint.textContent = `上次 ${money(prevCash)} → 本次 ${money(prevCash + delta)}`;
+    cashHint.textContent = `Cash 上次 ${money(prevCash)} → 本次 ${money(prevCash + delta)}`;
   };
   cashInput.addEventListener("input", updateCashHint);
   updateCashHint();
@@ -1667,7 +1667,7 @@ function openDailyBalanceSheet(date) {
   const casinoHint = document.getElementById("db-casino-hint");
   const updateCasinoHint = () => {
     const delta = +casinoInput.value || 0;
-    casinoHint.textContent = `上次 ${money(prevCasino)} → 本次 ${money(prevCasino + delta)}`;
+    casinoHint.textContent = `Casino 上次 ${money(prevCasino)} → 本次 ${money(prevCasino + delta)}`;
   };
   casinoInput.addEventListener("input", updateCasinoHint);
   updateCasinoHint();
