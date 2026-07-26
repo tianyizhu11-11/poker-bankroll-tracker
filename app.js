@@ -1911,6 +1911,59 @@ function getKnownLocations() {
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]);
 }
 
+function getGameSuggestions() {
+  const counts = new Map();
+  allSessions.forEach(s => {
+    const name = (s.game || "").trim();
+    if (!name) return;
+    counts.set(name, (counts.get(name) || 0) + 1);
+  });
+  const used = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]);
+  const usedLower = new Set(used.map(u => u.toLowerCase()));
+  const defaults = GAME_OPTIONS.filter(g => !usedLower.has(g.toLowerCase()));
+  return [
+    ...used.map(name => ({ value: name, icon: "🕘", sub: "常用" })),
+    ...defaults.map(name => ({ value: name, icon: "♠", sub: "" })),
+  ];
+}
+
+function setupGameAutocomplete() {
+  const input = document.getElementById("f-game");
+  const box = document.getElementById("gameSuggest");
+  if (!input || !box) return;
+  const known = getGameSuggestions();
+
+  function renderItems(items) {
+    if (!items.length) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+    box.innerHTML = items.map(it => `
+      <button type="button" class="loc-suggest-item" data-value="${escapeHtml(it.value)}">
+        <span class="loc-suggest-icon">${it.icon}</span>
+        <span class="loc-suggest-text">
+          <span class="loc-suggest-main">${escapeHtml(it.value)}</span>
+          ${it.sub ? `<span class="loc-suggest-sub">${escapeHtml(it.sub)}</span>` : ""}
+        </span>
+      </button>`).join("");
+    box.classList.remove("hidden");
+    box.querySelectorAll(".loc-suggest-item").forEach(btn => {
+      btn.addEventListener("mousedown", e => {
+        e.preventDefault();
+        input.value = btn.dataset.value;
+        box.classList.add("hidden");
+      });
+    });
+  }
+
+  function update() {
+    const q = input.value.trim().toLowerCase();
+    const items = q ? known.filter(it => it.value.toLowerCase().includes(q)) : known;
+    renderItems(items.slice(0, 8));
+  }
+
+  input.addEventListener("input", update);
+  input.addEventListener("focus", update);
+  input.addEventListener("blur", () => setTimeout(() => box.classList.add("hidden"), 150));
+}
+
 function setupLocationAutocomplete() {
   const input = document.getElementById("f-location");
   const box = document.getElementById("locSuggest");
@@ -1981,16 +2034,16 @@ function openSheet(id) {
   };
   sheetEl.innerHTML = `
     <h2>${id ? "编辑场次" : "记一局"}</h2>
-    <div class="row3">
+    <div class="row3 row3-game">
       <div class="field">
         <label>类型</label>
         <input list="typeList" id="f-gameType" value="${escapeHtml(s.gameType || "")}" placeholder="现金游戏" />
         <datalist id="typeList">${TYPE_OPTIONS.map(g => `<option value="${g}">`).join("")}</datalist>
       </div>
-      <div class="field">
+      <div class="field loc-field">
         <label>游戏</label>
-        <input list="gameList" id="f-game" value="${escapeHtml(s.game || "")}" placeholder="No Limit Hold'em" />
-        <datalist id="gameList">${GAME_OPTIONS.map(g => `<option value="${g}">`).join("")}</datalist>
+        <input type="text" id="f-game" autocomplete="off" value="${escapeHtml(s.game || "")}" placeholder="No Limit Hold'em" />
+        <div class="loc-suggest hidden" id="gameSuggest"></div>
       </div>
       <div class="field">
         <label>盲注</label>
@@ -2051,6 +2104,7 @@ function openSheet(id) {
   `;
   showOverlay();
   setupLocationAutocomplete();
+  setupGameAutocomplete();
   [document.getElementById("f-start-date"), document.getElementById("f-end-date")].forEach(autoFormatDateInput);
   [document.getElementById("f-start-time"), document.getElementById("f-end-time")].forEach(autoFormatTimeInput);
 

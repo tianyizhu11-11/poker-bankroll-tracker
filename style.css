@@ -557,6 +557,8 @@ body.no-tabbar { padding-bottom: 0; }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-width: 0; overflow: hidden; }
 .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; min-width: 0; overflow: hidden; }
 .row2 > *, .row3 > * { min-width: 0; max-width: 100%; overflow: hidden; }
+.row3-game { overflow: visible; }
+.row3-game > .loc-field { overflow: visible; }
 
 .loc-field { position: relative; overflow: visible; }
 .loc-suggest {
