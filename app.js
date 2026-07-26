@@ -1976,7 +1976,7 @@ function setupLocationAutocomplete() {
 function openSheet(id) {
   editingId = id;
   const s = id ? allSessions.find(x => x.id === id) : {
-    id: uid(), date: todayStr(), gameType: "现金游戏", game: "No Limit Texas Hold'em", stakes: "", location: "",
+    id: uid(), date: todayStr(), gameType: "现金游戏", game: "", stakes: "", location: "",
     startTime: "", endTime: "", endDate: "", buyIn: "", rebuy: "", cashOut: "", expenses: "", notes: "",
   };
   sheetEl.innerHTML = `
