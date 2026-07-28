@@ -1553,11 +1553,12 @@ function renderWeeklyHistoryTab() {
 function renderDailyBalanceTab() {
   const list = [...DAILY_BALANCE].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   const latest = list[list.length - 1];
-  const points = list.map(r => ({ date: r[0], label: r[0], cash: r[1], casino: r[2], cash2: r[3] || 0 }));
+  const points = list.map(r => ({ date: r[0], label: r[0], cash: r[1], casino: r[2], cash2: r[3] || 0, cashPlusCash2: r[1] + (r[3] || 0) }));
   const series = [
     { key: "cash", label: "Cash", color: "var(--series-1)", visible: true },
     { key: "casino", label: "Casino", color: "var(--series-4)", visible: true },
     { key: "cash2", label: "Cash2", color: "var(--series-2)", visible: true },
+    { key: "cashPlusCash2", label: "Cash+Cash2", color: "var(--good)", visible: true },
   ];
   const reversed = [...list].reverse();
   view.innerHTML = `
@@ -1584,10 +1585,8 @@ function renderDailyBalanceTab() {
     <div class="chart-card">
       <h3 style="text-align:center">每日余额曲线</h3>
       <div class="chart-wrap" id="dailyBalanceChartWrap"></div>
-      <div style="display:flex;justify-content:center;gap:14px;margin-top:10px;font-size:12.5px;font-weight:600">
-        <span><span class="legend-dot" style="background:${series[0].color}"></span>${series[0].label}</span>
-        <span><span class="legend-dot" style="background:${series[1].color}"></span>${series[1].label}</span>
-        <span><span class="legend-dot" style="background:${series[2].color}"></span>${series[2].label}</span>
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:14px;margin-top:10px;font-size:12.5px;font-weight:600">
+        ${series.map(s => `<span><span class="legend-dot" style="background:${s.color}"></span>${s.label}</span>`).join("")}
       </div>
     </div>` : ""}
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
