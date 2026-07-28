@@ -1622,6 +1622,7 @@ function openDailyBalanceSheet(date) {
   const excludeDate = existing ? existing[0] : null;
   const prevCash = prevDailyBalanceValue(initDate, excludeDate, 1);
   const prevCasino = prevDailyBalanceValue(initDate, excludeDate, 2);
+  const prevCash2 = prevDailyBalanceValue(initDate, excludeDate, 3);
   const initCashDelta = existing ? existing[1] - prevCash : "";
   const initCasinoDelta = existing ? existing[2] - prevCasino : "";
   sheetEl.innerHTML = `
@@ -1646,6 +1647,7 @@ function openDailyBalanceSheet(date) {
     </div>
     <div style="font-size:12.5px;color:var(--text-muted);margin:-8px 0 16px;text-align:right" id="db-cash-hint"></div>
     <div style="font-size:12.5px;color:var(--text-muted);margin:-8px 0 16px;text-align:right" id="db-casino-hint"></div>
+    <div style="font-size:12.5px;color:var(--text-muted);margin:-8px 0 16px;text-align:right" id="db-total-hint"></div>
     <div class="btn-row">
       <button class="btn btn-secondary" id="db-cancel">取消</button>
       <button class="btn btn-primary" id="db-save">保存</button>
@@ -1656,12 +1658,23 @@ function openDailyBalanceSheet(date) {
   autoFormatDateInput(document.getElementById("db-date"));
   const cashInput = document.getElementById("db-cash");
   const cashHint = document.getElementById("db-cash-hint");
+  const cash2Input = document.getElementById("db-cash2");
+  const totalHint = document.getElementById("db-total-hint");
+  const updateTotalHint = () => {
+    const cashDelta = +cashInput.value || 0;
+    const cash2Val = +cash2Input.value || 0;
+    const prevTotal = prevCash + prevCash2;
+    const newTotal = (prevCash + cashDelta) + cash2Val;
+    totalHint.textContent = `Cash+Cash2 上次 ${money(prevTotal)} → 本次 ${money(newTotal)}`;
+  };
   const updateCashHint = () => {
     const delta = +cashInput.value || 0;
     cashHint.textContent = `Cash 上次 ${money(prevCash)} → 本次 ${money(prevCash + delta)}`;
+    updateTotalHint();
   };
   cashInput.addEventListener("input", updateCashHint);
   updateCashHint();
+  cash2Input.addEventListener("input", updateTotalHint);
   const casinoInput = document.getElementById("db-casino");
   const casinoHint = document.getElementById("db-casino-hint");
   const updateCasinoHint = () => {
