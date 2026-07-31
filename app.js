@@ -1463,6 +1463,17 @@ function sortedDailyBalance() {
     return (a[5] || 0) - (b[5] || 0);
   });
 }
+// Cash/Casino are stored as per-entry deltas; this walks the chronological
+// order and returns the running (absolute) balance as of each entry, so
+// editing an earlier entry's delta correctly cascades into every later total.
+function dailyBalanceWithTotals() {
+  let runCash = 0, runCasino = 0;
+  return sortedDailyBalance().map(r => {
+    runCash += r[1];
+    runCasino += r[2];
+    return { date: r[0], cashDelta: r[1], casinoDelta: r[2], cash2: r[3] || 0, id: r[4], createdAt: r[5] || 0, cash: runCash, casino: runCasino };
+  });
+}
 function upsertDailyBalance(id, date, cash, casino, cash2, createdAt) {
   const idx = DAILY_BALANCE.findIndex(r => r[4] === id);
   const row = [date, cash, casino, cash2, id, createdAt];
@@ -1559,9 +1570,9 @@ function renderWeeklyHistoryTab() {
 }
 
 function renderDailyBalanceTab() {
-  const list = sortedDailyBalance();
+  const list = dailyBalanceWithTotals();
   const latest = list[list.length - 1];
-  const points = list.map(r => ({ date: r[0], label: r[0], cash: r[1], casino: r[2], cash2: r[3] || 0, cashPlusCash2: r[1] + (r[3] || 0) }));
+  const points = list.map(r => ({ date: r.date, label: r.date, cash: r.cash, casino: r.casino, cash2: r.cash2, cashPlusCash2: r.cash + r.cash2 }));
   const series = [
     { key: "cash", label: "Cash", color: "var(--series-1)", visible: true },
     { key: "casino", label: "Casino", color: "var(--series-4)", visible: true },
@@ -1573,20 +1584,20 @@ function renderDailyBalanceTab() {
     <h2 style="margin:0 0 14px">每日余额</h2>
     <div class="stat-grid" style="margin-bottom:16px">
       <div class="stat-tile">
-        <div class="label">最新 Cash${latest ? " (" + latest[0] + ")" : ""}</div>
-        <div class="value">${latest ? money(latest[1]) : "--"}</div>
+        <div class="label">最新 Cash${latest ? " (" + latest.date + ")" : ""}</div>
+        <div class="value">${latest ? money(latest.cash) : "--"}</div>
       </div>
       <div class="stat-tile">
-        <div class="label">最新 Casino${latest ? " (" + latest[0] + ")" : ""}</div>
-        <div class="value">${latest ? money(latest[2]) : "--"}</div>
+        <div class="label">最新 Casino${latest ? " (" + latest.date + ")" : ""}</div>
+        <div class="value">${latest ? money(latest.casino) : "--"}</div>
       </div>
       <div class="stat-tile">
-        <div class="label">最新 Cash2${latest ? " (" + latest[0] + ")" : ""}</div>
-        <div class="value">${latest ? money(latest[3] || 0) : "--"}</div>
+        <div class="label">最新 Cash2${latest ? " (" + latest.date + ")" : ""}</div>
+        <div class="value">${latest ? money(latest.cash2) : "--"}</div>
       </div>
       <div class="stat-tile">
-        <div class="label">Cash + Cash2 总和${latest ? " (" + latest[0] + ")" : ""}</div>
-        <div class="value">${latest ? money(latest[1] + (latest[3] || 0)) : "--"}</div>
+        <div class="label">Cash + Cash2 总和${latest ? " (" + latest.date + ")" : ""}</div>
+        <div class="value">${latest ? money(latest.cash + latest.cash2) : "--"}</div>
       </div>
     </div>
     ${list.length >= 2 ? `
@@ -1602,13 +1613,13 @@ function renderDailyBalanceTab() {
     </div>
     ${reversed.length ? (() => {
       const dateCounts = new Map();
-      list.forEach(r => dateCounts.set(r[0], (dateCounts.get(r[0]) || 0) + 1));
+      list.forEach(r => dateCounts.set(r.date, (dateCounts.get(r.date) || 0) + 1));
       return reversed.map(r => `
-      <div class="session-row" data-db-id="${r[4]}">
-        <div class="session-main"><div class="title">${r[0]}${dateCounts.get(r[0]) > 1 ? " " + fmtTimeFromMs(r[5]) : ""}</div></div>
+      <div class="session-row" data-db-id="${r.id}">
+        <div class="session-main"><div class="title">${r.date}${dateCounts.get(r.date) > 1 ? " " + fmtTimeFromMs(r.createdAt) : ""}</div></div>
         <div class="session-side">
-          <div class="profit">${money(r[1])}</div>
-          <div class="hourly">Casino ${money(r[2])} · Cash2 ${money(r[3] || 0)}</div>
+          <div class="profit">${money(r.cash)}</div>
+          <div class="hourly">Casino ${money(r.casino)} · Cash2 ${money(r.cash2)}</div>
         </div>
       </div>`).join("");
     })() : `<div class="empty-state"><div class="big">📝</div><p>还没有记录</p><p>点上面"+ 记一天"开始</p></div>`}
@@ -1620,18 +1631,18 @@ function renderDailyBalanceTab() {
   });
 }
 
-function prevDailyBalanceEntry(beforeDate, beforeCreatedAt, excludeId) {
-  const candidates = DAILY_BALANCE.filter(r => {
-    if (r[4] === excludeId) return false;
-    if (r[0] < beforeDate) return true;
-    if (r[0] === beforeDate && (r[5] || 0) < beforeCreatedAt) return true;
+function prevDailyBalanceTotals(beforeDate, beforeCreatedAt, excludeId) {
+  const candidates = dailyBalanceWithTotals().filter(r => {
+    if (r.id === excludeId) return false;
+    if (r.date < beforeDate) return true;
+    if (r.date === beforeDate && r.createdAt < beforeCreatedAt) return true;
     return false;
   });
   candidates.sort((a, b) => {
-    if (a[0] !== b[0]) return a[0] < b[0] ? -1 : 1;
-    return (a[5] || 0) - (b[5] || 0);
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    return a.createdAt - b.createdAt;
   });
-  return candidates.length ? candidates[candidates.length - 1] : null;
+  return candidates.length ? candidates[candidates.length - 1] : { cash: 0, casino: 0, cash2: 0 };
 }
 
 function openDailyBalanceSheet(id) {
@@ -1640,12 +1651,12 @@ function openDailyBalanceSheet(id) {
   const initCash2 = existing ? existing[3] || "" : "";
   const entryId = existing ? existing[4] : uid();
   const entryCreatedAt = existing ? existing[5] : Date.now();
-  const prevEntry = prevDailyBalanceEntry(initDate, entryCreatedAt, existing ? existing[4] : null);
-  const prevCash = prevEntry ? prevEntry[1] : 0;
-  const prevCasino = prevEntry ? prevEntry[2] : 0;
-  const prevCash2 = prevEntry ? prevEntry[3] || 0 : 0;
-  const initCashDelta = existing ? existing[1] - prevCash : "";
-  const initCasinoDelta = existing ? existing[2] - prevCasino : "";
+  const prevTotals = prevDailyBalanceTotals(initDate, entryCreatedAt, existing ? existing[4] : null);
+  const prevCash = prevTotals.cash;
+  const prevCasino = prevTotals.casino;
+  const prevCash2 = prevTotals.cash2;
+  const initCashDelta = existing ? existing[1] : "";
+  const initCasinoDelta = existing ? existing[2] : "";
   sheetEl.innerHTML = `
     <h2>${existing ? "编辑当日余额" : "记一天余额"}</h2>
     <div class="field">
@@ -1708,11 +1719,9 @@ function openDailyBalanceSheet(id) {
   document.getElementById("db-save").addEventListener("click", () => {
     const d = document.getElementById("db-date").value || todayStr();
     const cashDelta = +document.getElementById("db-cash").value || 0;
-    const cash = prevCash + cashDelta;
     const casinoDelta = +document.getElementById("db-casino").value || 0;
-    const casino = prevCasino + casinoDelta;
     const cash2 = +document.getElementById("db-cash2").value || 0;
-    upsertDailyBalance(entryId, d, cash, casino, cash2, entryCreatedAt);
+    upsertDailyBalance(entryId, d, cashDelta, casinoDelta, cash2, entryCreatedAt);
     closeSheet();
     renderView();
   });
