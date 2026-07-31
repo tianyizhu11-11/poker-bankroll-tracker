@@ -374,6 +374,11 @@ function fmtDate(d) {
   const [y, m, day] = d.split("-");
   return `${m}/${day}`;
 }
+function fmtTimeFromMs(ms) {
+  if (!ms) return "";
+  const d = new Date(ms);
+  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
 function fmtDateFull(d) {
   const [y, m, day] = d.split("-");
   return `${y}年${m}月${day}日`;
@@ -1444,7 +1449,7 @@ async function syncDailyBalanceFromServer() {
     const serverData = await res.json();
     if (!Array.isArray(serverData)) return;
     if (serverData.length > 0) {
-      DAILY_BALANCE = serverData.map(r => [r.date, r.cash, r.casino, r.cash2 || 0]);
+      DAILY_BALANCE = serverData.map(r => [r.date, r.cash, r.casino, r.cash2 || 0, r.id, r.createdAt || 0]);
       saveDailyBalance();
       if (activeSection === "note2") renderView();
     } else if (DAILY_BALANCE.length > 0) {
@@ -1452,19 +1457,22 @@ async function syncDailyBalanceFromServer() {
     }
   } catch (e) { /* offline: keep local cache */ }
 }
-function upsertDailyBalance(date, cash, casino, cash2) {
-  const idx = DAILY_BALANCE.findIndex(r => r[0] === date);
-  if (idx >= 0) DAILY_BALANCE[idx] = [date, cash, casino, cash2];
-  else {
-    let insertAt = DAILY_BALANCE.findIndex(r => r[0] > date);
-    if (insertAt === -1) insertAt = DAILY_BALANCE.length;
-    DAILY_BALANCE.splice(insertAt, 0, [date, cash, casino, cash2]);
-  }
+function sortedDailyBalance() {
+  return [...DAILY_BALANCE].sort((a, b) => {
+    if (a[0] !== b[0]) return a[0] < b[0] ? -1 : 1;
+    return (a[5] || 0) - (b[5] || 0);
+  });
+}
+function upsertDailyBalance(id, date, cash, casino, cash2, createdAt) {
+  const idx = DAILY_BALANCE.findIndex(r => r[4] === id);
+  const row = [date, cash, casino, cash2, id, createdAt];
+  if (idx >= 0) DAILY_BALANCE[idx] = row;
+  else DAILY_BALANCE.push(row);
   saveDailyBalance();
   syncDailyBalanceToServer();
 }
-function deleteDailyBalance(date) {
-  const idx = DAILY_BALANCE.findIndex(r => r[0] === date);
+function deleteDailyBalance(id) {
+  const idx = DAILY_BALANCE.findIndex(r => r[4] === id);
   if (idx >= 0) DAILY_BALANCE.splice(idx, 1);
   saveDailyBalance();
   syncDailyBalanceToServer();
@@ -1551,7 +1559,7 @@ function renderWeeklyHistoryTab() {
 }
 
 function renderDailyBalanceTab() {
-  const list = [...DAILY_BALANCE].sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  const list = sortedDailyBalance();
   const latest = list[list.length - 1];
   const points = list.map(r => ({ date: r[0], label: r[0], cash: r[1], casino: r[2], cash2: r[3] || 0, cashPlusCash2: r[1] + (r[3] || 0) }));
   const series = [
@@ -1592,37 +1600,50 @@ function renderDailyBalanceTab() {
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
       <button class="btn btn-primary" id="db-add-btn" style="padding:8px 16px;font-size:14px;width:auto">+ 记一天</button>
     </div>
-    ${reversed.length ? reversed.map(r => `
-      <div class="session-row" data-db-date="${r[0]}">
-        <div class="session-main"><div class="title">${r[0]}</div></div>
+    ${reversed.length ? (() => {
+      const dateCounts = new Map();
+      list.forEach(r => dateCounts.set(r[0], (dateCounts.get(r[0]) || 0) + 1));
+      return reversed.map(r => `
+      <div class="session-row" data-db-id="${r[4]}">
+        <div class="session-main"><div class="title">${r[0]}${dateCounts.get(r[0]) > 1 ? " " + fmtTimeFromMs(r[5]) : ""}</div></div>
         <div class="session-side">
           <div class="profit">${money(r[1])}</div>
           <div class="hourly">Casino ${money(r[2])} · Cash2 ${money(r[3] || 0)}</div>
         </div>
-      </div>`).join("") : `<div class="empty-state"><div class="big">📝</div><p>还没有记录</p><p>点上面"+ 记一天"开始</p></div>`}
+      </div>`).join("");
+    })() : `<div class="empty-state"><div class="big">📝</div><p>还没有记录</p><p>点上面"+ 记一天"开始</p></div>`}
   `;
   if (list.length >= 2) drawMultiLineChart(document.getElementById("dailyBalanceChartWrap"), points, series);
   document.getElementById("db-add-btn").addEventListener("click", () => openDailyBalanceSheet(null));
-  view.querySelectorAll("[data-db-date]").forEach(row => {
-    row.addEventListener("click", () => openDailyBalanceSheet(row.dataset.dbDate));
+  view.querySelectorAll("[data-db-id]").forEach(row => {
+    row.addEventListener("click", () => openDailyBalanceSheet(row.dataset.dbId));
   });
 }
 
-function prevDailyBalanceValue(beforeDate, excludeDate, colIndex) {
-  const list = DAILY_BALANCE
-    .filter(r => r[0] < beforeDate && r[0] !== excludeDate)
-    .sort((a, b) => (a[0] < b[0] ? -1 : 1));
-  return list.length ? list[list.length - 1][colIndex] || 0 : 0;
+function prevDailyBalanceEntry(beforeDate, beforeCreatedAt, excludeId) {
+  const candidates = DAILY_BALANCE.filter(r => {
+    if (r[4] === excludeId) return false;
+    if (r[0] < beforeDate) return true;
+    if (r[0] === beforeDate && (r[5] || 0) < beforeCreatedAt) return true;
+    return false;
+  });
+  candidates.sort((a, b) => {
+    if (a[0] !== b[0]) return a[0] < b[0] ? -1 : 1;
+    return (a[5] || 0) - (b[5] || 0);
+  });
+  return candidates.length ? candidates[candidates.length - 1] : null;
 }
 
-function openDailyBalanceSheet(date) {
-  const existing = date ? DAILY_BALANCE.find(r => r[0] === date) : null;
+function openDailyBalanceSheet(id) {
+  const existing = id ? DAILY_BALANCE.find(r => r[4] === id) : null;
   const initDate = existing ? existing[0] : todayStr();
   const initCash2 = existing ? existing[3] || "" : "";
-  const excludeDate = existing ? existing[0] : null;
-  const prevCash = prevDailyBalanceValue(initDate, excludeDate, 1);
-  const prevCasino = prevDailyBalanceValue(initDate, excludeDate, 2);
-  const prevCash2 = prevDailyBalanceValue(initDate, excludeDate, 3);
+  const entryId = existing ? existing[4] : uid();
+  const entryCreatedAt = existing ? existing[5] : Date.now();
+  const prevEntry = prevDailyBalanceEntry(initDate, entryCreatedAt, existing ? existing[4] : null);
+  const prevCash = prevEntry ? prevEntry[1] : 0;
+  const prevCasino = prevEntry ? prevEntry[2] : 0;
+  const prevCash2 = prevEntry ? prevEntry[3] || 0 : 0;
   const initCashDelta = existing ? existing[1] - prevCash : "";
   const initCasinoDelta = existing ? existing[2] - prevCasino : "";
   sheetEl.innerHTML = `
@@ -1691,14 +1712,13 @@ function openDailyBalanceSheet(date) {
     const casinoDelta = +document.getElementById("db-casino").value || 0;
     const casino = prevCasino + casinoDelta;
     const cash2 = +document.getElementById("db-cash2").value || 0;
-    if (existing && existing[0] !== d) deleteDailyBalance(existing[0]);
-    upsertDailyBalance(d, cash, casino, cash2);
+    upsertDailyBalance(entryId, d, cash, casino, cash2, entryCreatedAt);
     closeSheet();
     renderView();
   });
   const delBtn = document.getElementById("db-delete");
   if (delBtn) delBtn.addEventListener("click", () => {
-    deleteDailyBalance(existing[0]);
+    deleteDailyBalance(existing[4]);
     closeSheet();
     renderView();
   });
