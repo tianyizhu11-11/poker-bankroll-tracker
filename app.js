@@ -123,6 +123,7 @@ function computeMetrics(s) {
       if (end <= start) end = new Date(end.getTime() + 24 * 3600 * 1000);
     }
     durationMin = (end - start) / 60000;
+    if (!Number.isFinite(durationMin)) durationMin = 0;
   }
   const durationHr = durationMin / 60;
   const hourly = durationHr > 0 ? profit / durationHr : null;
