@@ -186,7 +186,7 @@ const TREND_RANGES = [
   { key: "max", label: "最大" },
 ];
 const TREND_SERIES_META = [
-  { key: "cash", label: "现金游戏", color: "var(--series-1)" },
+  { key: "cash", label: "现金局", color: "var(--series-1)" },
   { key: "tourn", label: "锦标赛", color: "var(--series-4)" },
   { key: "total", label: "总计", color: "var(--text-primary)" },
 ];
@@ -1160,7 +1160,7 @@ function renderProfitDistHTML(d) {
 function openLocationDetail(name) {
   const d = computeLocationDetail(name);
   const typeRows = [];
-  if (d.cashCount > 0) typeRows.push({ label: "现金游戏", ...d.cashSummary });
+  if (d.cashCount > 0) typeRows.push({ label: "现金局", ...d.cashSummary });
   if (d.tournCount > 0) typeRows.push({ label: "锦标赛", ...d.tournSummary });
 
   sheetEl.innerHTML = `
@@ -1177,7 +1177,7 @@ function openLocationDetail(name) {
       <div style="text-align:center">
         ${buildDonutSVG([{ value: d.cashCount, color: "var(--series-1)" }, { value: d.tournCount, color: "var(--series-4)" }], String(d.count), "局")}
         <div style="font-size:12px;margin-top:8px;text-align:left">
-          <div><span class="legend-dot" style="background:var(--series-1)"></span>现金游戏 (${d.cashCount})</div>
+          <div><span class="legend-dot" style="background:var(--series-1)"></span>现金局 (${d.cashCount})</div>
           <div><span class="legend-dot" style="background:var(--series-4)"></span>锦标赛 (${d.tournCount})</div>
         </div>
       </div>
@@ -1857,7 +1857,7 @@ document.addEventListener("click", e => {
 const overlay = document.getElementById("overlay");
 const sheetEl = document.getElementById("sheet");
 
-const TYPE_OPTIONS = ["现金游戏", "锦标赛", "SNG", "Casino", "Home Game", "Online", "其他"];
+const TYPE_OPTIONS = ["现金局", "锦标赛", "SNG", "Casino", "Home Game", "Online", "其他"];
 const GAME_OPTIONS = ["No Limit Texas Hold'em", "Pot Limit Omaha", "短牌 Short Deck", "其他"];
 
 function todayStr() {
@@ -2078,7 +2078,7 @@ function setupLocationAutocomplete() {
 function openSheet(id) {
   editingId = id;
   const s = id ? allSessions.find(x => x.id === id) : {
-    id: uid(), date: todayStr(), gameType: "现金游戏", game: "", stakes: "", location: "",
+    id: uid(), date: todayStr(), gameType: "现金局", game: "", stakes: "", location: "",
     startTime: "", endTime: "", endDate: "", buyIn: "", rebuy: "", cashOut: "", expenses: "", notes: "",
   };
   sheetEl.innerHTML = `
@@ -2086,7 +2086,7 @@ function openSheet(id) {
     <div class="row3 row3-game">
       <div class="field">
         <label>类型</label>
-        <input list="typeList" id="f-gameType" value="${escapeHtml(s.gameType || "")}" placeholder="现金游戏" />
+        <input list="typeList" id="f-gameType" value="${escapeHtml(s.gameType || "")}" placeholder="现金局" />
         <datalist id="typeList">${TYPE_OPTIONS.map(g => `<option value="${g}">`).join("")}</datalist>
       </div>
       <div class="field loc-field">
