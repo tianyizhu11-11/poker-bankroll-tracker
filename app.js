@@ -2228,9 +2228,13 @@ function openSheet(id) {
 let lockedScrollY = 0;
 function showOverlay() {
   overlay.classList.remove("hidden");
-  lockedScrollY = window.scrollY;
-  document.body.style.top = -lockedScrollY + "px";
-  document.body.classList.add("modal-open");
+  // A sheet transitioning to another sheet (e.g. detail -> edit) calls this
+  // again while already locked; don't re-capture scrollY from the fixed body.
+  if (!document.body.classList.contains("modal-open")) {
+    lockedScrollY = window.scrollY;
+    document.body.style.top = -lockedScrollY + "px";
+    document.body.classList.add("modal-open");
+  }
 }
 function closeSheet() {
   overlay.classList.add("hidden");
