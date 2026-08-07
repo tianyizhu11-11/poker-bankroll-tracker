@@ -281,7 +281,9 @@ function computeTournamentDetail() {
 function computeGameBreakdown() {
   const map = new Map();
   sessions.forEach(s => {
-    const key = (s.stakes || s.gameType || "未分类").trim() || "未分类";
+    // Tournaments stay merged into one "锦标赛" row (blinds don't apply to them);
+    // cash games are grouped by the raw game-field text, matching the reference app.
+    const key = isTournamentType(s.gameType) ? "锦标赛" : (s.game || s.stakes || s.gameType || "未分类").trim() || "未分类";
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(s);
   });
