@@ -1509,6 +1509,7 @@ function weeklyHistorySortKey(entry) {
 function applySessionToWeeklyHistory(dateStr, profit) {
   if (!dateStr || !Number.isFinite(profit) || profit === 0) return;
   const { year, week } = isoWeekOf(dateStr);
+  if (!Number.isFinite(year) || !Number.isFinite(week)) return;
   const idx = WEEKLY_HISTORY.findIndex(w => w[0] === year && parseWeekLabel(w[1]).includes(week));
   if (idx >= 0) {
     WEEKLY_HISTORY[idx][2] = (WEEKLY_HISTORY[idx][2] || 0) + profit;
