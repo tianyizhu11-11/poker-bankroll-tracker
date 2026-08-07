@@ -2225,8 +2225,11 @@ function openSheet(id) {
     }
   });
 }
+let lockedScrollY = 0;
 function showOverlay() {
   overlay.classList.remove("hidden");
+  lockedScrollY = window.scrollY;
+  document.body.style.top = -lockedScrollY + "px";
   document.body.classList.add("modal-open");
 }
 function closeSheet() {
@@ -2234,6 +2237,8 @@ function closeSheet() {
   sheetEl.innerHTML = "";
   editingId = null;
   document.body.classList.remove("modal-open");
+  document.body.style.top = "";
+  window.scrollTo(0, lockedScrollY);
 }
 overlay.addEventListener("click", e => { if (e.target === overlay) closeSheet(); });
 
