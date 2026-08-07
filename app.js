@@ -1506,7 +1506,7 @@ function weeklyHistorySortKey(entry) {
   const nums = parseWeekLabel(entry[1]);
   return entry[0] * 100 + Math.max(...nums);
 }
-function applySessionToWeeklyHistory(dateStr, profit) {
+function applySessionToWeeklyHistoryLocal(dateStr, profit) {
   if (!dateStr || !Number.isFinite(profit) || profit === 0) return;
   const { year, week } = isoWeekOf(dateStr);
   if (!Number.isFinite(year) || !Number.isFinite(week)) return;
@@ -1522,6 +1522,12 @@ function applySessionToWeeklyHistory(dateStr, profit) {
     WEEKLY_HISTORY.splice(insertAt, 0, [year, `Wk${week}`, profit, prevTotal + profit]);
     for (let i = insertAt + 1; i < WEEKLY_HISTORY.length; i++) WEEKLY_HISTORY[i][3] += profit;
   }
+}
+// Single-mutation callers (new session, delete, undo-delete) mutate + sync in one shot.
+// Editing calls applySessionToWeeklyHistoryLocal twice (reverse old, apply new) and
+// syncs once itself, so the two writes never race each other as separate requests.
+function applySessionToWeeklyHistory(dateStr, profit) {
+  applySessionToWeeklyHistoryLocal(dateStr, profit);
   saveWeeklyHistory();
   syncWeeklyHistoryToServer();
 }
@@ -2195,8 +2201,10 @@ function openSheet(id) {
     if (isNew) {
       applySessionToWeeklyHistory(data.date, computeMetrics(data).profit);
     } else if (oldData) {
-      applySessionToWeeklyHistory(oldData.date, -computeMetrics(oldData).profit);
-      applySessionToWeeklyHistory(data.date, computeMetrics(data).profit);
+      applySessionToWeeklyHistoryLocal(oldData.date, -computeMetrics(oldData).profit);
+      applySessionToWeeklyHistoryLocal(data.date, computeMetrics(data).profit);
+      saveWeeklyHistory();
+      syncWeeklyHistoryToServer();
     }
     closeSheet();
     renderView();
