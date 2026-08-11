@@ -1701,22 +1701,19 @@ function openDailyBalanceSheet(id) {
   const cashInput = document.getElementById("db-cash");
   const cashHint = document.getElementById("db-cash-hint");
   const cash2Input = document.getElementById("db-cash2");
-  const totalHint = document.getElementById("db-total-hint");
-  const updateTotalHint = () => {
-    const cashDelta = +cashInput.value || 0;
+  const cash2Hint = document.getElementById("db-total-hint");
+  const updateCash2Hint = () => {
     const cash2Val = +cash2Input.value || 0;
-    const prevTotal = prevCash + prevCash2;
-    const newTotal = (prevCash + cashDelta) + cash2Val;
-    totalHint.textContent = `Cash+Cash2 上次 ${money(prevTotal)} → 本次 ${money(newTotal)}`;
+    cash2Hint.textContent = `Cash2 上次 ${money(prevCash2)} → 本次 ${money(cash2Val)}`;
   };
   const updateCashHint = () => {
     const delta = +cashInput.value || 0;
     cashHint.textContent = `Cash 上次 ${money(prevCash)} → 本次 ${money(prevCash + delta)}`;
-    updateTotalHint();
   };
   cashInput.addEventListener("input", updateCashHint);
   updateCashHint();
-  cash2Input.addEventListener("input", updateTotalHint);
+  cash2Input.addEventListener("input", updateCash2Hint);
+  updateCash2Hint();
   const casinoInput = document.getElementById("db-casino");
   const casinoHint = document.getElementById("db-casino-hint");
   const updateCasinoHint = () => {
