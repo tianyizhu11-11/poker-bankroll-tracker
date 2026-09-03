@@ -44,7 +44,6 @@ function loadSessions() {
 }
 function saveSessions() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(allSessions));
-  syncToServer();
 }
 function uid() {
   return (crypto.randomUUID ? crypto.randomUUID() : "id-" + Date.now() + "-" + Math.random().toString(16).slice(2));
@@ -81,6 +80,39 @@ function syncToServer() {
     return false;
   });
   return syncInFlight;
+}
+// Single-record writes (add/edit/delete/undo) sync just that one row instead of
+// pushing the entire table, so a routine edit costs one row-write, not N.
+function syncSessionRow(s) {
+  const token = getAuthToken();
+  if (!token) return;
+  fetch(`${API_URL}/${encodeURIComponent(s.id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: JSON.stringify(s),
+  }).then(res => {
+    if (res.status === 401) {
+      localStorage.removeItem(AUTH_KEY);
+      showToast("密码错误,数据仅保存在本机,请重新保存以同步");
+    } else if (!res.ok) {
+      showToast("同步失败,数据已保存在本机");
+    }
+  }).catch(() => showToast("网络异常,数据已保存在本机"));
+}
+function syncSessionDelete(id) {
+  const token = getAuthToken();
+  if (!token) return;
+  fetch(`${API_URL}/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Authorization: "Bearer " + token },
+  }).then(res => {
+    if (res.status === 401) {
+      localStorage.removeItem(AUTH_KEY);
+      showToast("密码错误,数据仅保存在本机,请重新保存以同步");
+    } else if (!res.ok) {
+      showToast("同步失败,数据已保存在本机");
+    }
+  }).catch(() => showToast("网络异常,数据已保存在本机"));
 }
 async function syncFromServer() {
   try {
@@ -1408,11 +1440,12 @@ async function syncWeeklyHistoryFromServer() {
     const serverData = await res.json();
     if (!Array.isArray(serverData)) return;
     if (serverData.length > 0) {
-      WEEKLY_HISTORY = serverData.map(r => [r.year, r.label, r.weekNet, r.total]);
+      WEEKLY_HISTORY = serverData.map(r => [r.year, r.label, r.weekNet, 0]);
+      recomputeWeeklyTotals();
       saveWeeklyHistory();
       if (activeSection === "note1") renderView();
     } else if (WEEKLY_HISTORY.length > 0) {
-      syncWeeklyHistoryToServer();
+      syncWeeklyHistoryToServer(); // bootstrap: server is empty, push the local seed data up in one shot
     }
   } catch (e) { /* offline: keep local cache */ }
 }
@@ -1477,19 +1510,52 @@ function dailyBalanceWithTotals() {
     return { date: r[0], cashDelta: r[1], casinoDelta: r[2], cash2: r[3] || 0, id: r[4], createdAt: r[5] || 0, cash: runCash, casino: runCasino };
   });
 }
+// Single-row writes, mirroring syncSessionRow/syncWeeklyHistoryRow above.
+function syncDailyBalanceRow(row) {
+  const [date, cash, casino, cash2, id, createdAt] = row;
+  const token = getAuthToken();
+  if (!token) return;
+  fetch(`${DAILY_BALANCE_API_URL}/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: JSON.stringify({ date, cash, casino, cash2, createdAt }),
+  }).then(res => {
+    if (res.status === 401) {
+      localStorage.removeItem(AUTH_KEY);
+      showToast("密码错误,每日余额仅保存在本机");
+    } else if (!res.ok) {
+      showToast("每日余额同步失败,数据已保存在本机");
+    }
+  }).catch(() => showToast("网络异常,每日余额已保存在本机"));
+}
+function syncDailyBalanceDelete(id) {
+  const token = getAuthToken();
+  if (!token) return;
+  fetch(`${DAILY_BALANCE_API_URL}/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Authorization: "Bearer " + token },
+  }).then(res => {
+    if (res.status === 401) {
+      localStorage.removeItem(AUTH_KEY);
+      showToast("密码错误,每日余额仅保存在本机");
+    } else if (!res.ok) {
+      showToast("每日余额同步失败,数据已保存在本机");
+    }
+  }).catch(() => showToast("网络异常,每日余额已保存在本机"));
+}
 function upsertDailyBalance(id, date, cash, casino, cash2, createdAt) {
   const idx = DAILY_BALANCE.findIndex(r => r[4] === id);
   const row = [date, cash, casino, cash2, id, createdAt];
   if (idx >= 0) DAILY_BALANCE[idx] = row;
   else DAILY_BALANCE.push(row);
   saveDailyBalance();
-  syncDailyBalanceToServer();
+  syncDailyBalanceRow(row);
 }
 function deleteDailyBalance(id) {
   const idx = DAILY_BALANCE.findIndex(r => r[4] === id);
   if (idx >= 0) DAILY_BALANCE.splice(idx, 1);
   saveDailyBalance();
-  syncDailyBalanceToServer();
+  syncDailyBalanceDelete(id);
 }
 
 // ISO-8601 week (Monday-start) — matches the week numbering used in the Casino Weekly ledger
@@ -1508,30 +1574,64 @@ function weeklyHistorySortKey(entry) {
   const nums = parseWeekLabel(entry[1]);
   return entry[0] * 100 + Math.max(...nums);
 }
+function weeklyHistoryId(year, label) { return year + "-" + label; }
+// total is a running sum, recomputed locally after any mutation, and never sent to
+// the server — the server only stores each week's own weekNet, so an edit only ever
+// needs to sync the one (or two, on edit) row(s) that actually changed.
+function recomputeWeeklyTotals() {
+  let running = 0;
+  for (const w of WEEKLY_HISTORY) { running += (w[2] || 0); w[3] = running; }
+}
 function applySessionToWeeklyHistoryLocal(dateStr, profit) {
-  if (!dateStr || !Number.isFinite(profit) || profit === 0) return;
+  if (!dateStr || !Number.isFinite(profit) || profit === 0) return null;
   const { year, week } = isoWeekOf(dateStr);
-  if (!Number.isFinite(year) || !Number.isFinite(week)) return;
+  if (!Number.isFinite(year) || !Number.isFinite(week)) return null;
   const idx = WEEKLY_HISTORY.findIndex(w => w[0] === year && parseWeekLabel(w[1]).includes(week));
+  let row;
   if (idx >= 0) {
     WEEKLY_HISTORY[idx][2] = (WEEKLY_HISTORY[idx][2] || 0) + profit;
-    for (let i = idx; i < WEEKLY_HISTORY.length; i++) WEEKLY_HISTORY[i][3] += profit;
+    row = WEEKLY_HISTORY[idx];
   } else {
     const newKey = year * 100 + week;
     let insertAt = WEEKLY_HISTORY.findIndex(w => weeklyHistorySortKey(w) > newKey);
     if (insertAt === -1) insertAt = WEEKLY_HISTORY.length;
-    const prevTotal = insertAt > 0 ? WEEKLY_HISTORY[insertAt - 1][3] : 0;
-    WEEKLY_HISTORY.splice(insertAt, 0, [year, `Wk${week}`, profit, prevTotal + profit]);
-    for (let i = insertAt + 1; i < WEEKLY_HISTORY.length; i++) WEEKLY_HISTORY[i][3] += profit;
+    row = [year, `Wk${week}`, profit, 0];
+    WEEKLY_HISTORY.splice(insertAt, 0, row);
   }
+  recomputeWeeklyTotals();
+  return { year: row[0], week, label: row[1], weekNet: row[2] };
+}
+// Syncs just the row(s) that actually changed. On a plain add/delete/undo that's one
+// row; on an edit it's up to two (old week decremented, new week incremented) — and
+// if both calls touched the same week, only its final combined value is pushed once.
+function syncWeeklyHistoryRow(row) {
+  if (!row) return;
+  const token = getAuthToken();
+  if (!token) return;
+  const id = weeklyHistoryId(row.year, row.label);
+  fetch(`${WEEKLY_API_URL}/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: JSON.stringify({ year: row.year, week: row.week, label: row.label, weekNet: row.weekNet }),
+  }).then(res => {
+    if (res.status === 401) {
+      localStorage.removeItem(AUTH_KEY);
+      showToast("密码错误,Weekly数据仅保存在本机");
+    } else if (!res.ok) {
+      showToast("Weekly同步失败,数据已保存在本机");
+    }
+  }).catch(() => showToast("网络异常,Weekly数据已保存在本机"));
+}
+function syncWeeklyHistoryRows(rows) {
+  const byId = new Map();
+  rows.filter(Boolean).forEach(r => byId.set(weeklyHistoryId(r.year, r.label), r));
+  byId.forEach(syncWeeklyHistoryRow);
 }
 // Single-mutation callers (new session, delete, undo-delete) mutate + sync in one shot.
-// Editing calls applySessionToWeeklyHistoryLocal twice (reverse old, apply new) and
-// syncs once itself, so the two writes never race each other as separate requests.
 function applySessionToWeeklyHistory(dateStr, profit) {
-  applySessionToWeeklyHistoryLocal(dateStr, profit);
+  const row = applySessionToWeeklyHistoryLocal(dateStr, profit);
   saveWeeklyHistory();
-  syncWeeklyHistoryToServer();
+  syncWeeklyHistoryRows([row]);
 }
 
 function renderWeeklyHistoryTab() {
@@ -2197,13 +2297,14 @@ function openSheet(id) {
     const oldData = isNew ? null : allSessions[idx];
     if (idx >= 0) allSessions[idx] = data; else allSessions.push(data);
     saveSessions();
+    syncSessionRow(data);
     if (isNew) {
       applySessionToWeeklyHistory(data.date, computeMetrics(data).profit);
     } else if (oldData) {
-      applySessionToWeeklyHistoryLocal(oldData.date, -computeMetrics(oldData).profit);
-      applySessionToWeeklyHistoryLocal(data.date, computeMetrics(data).profit);
+      const rowOld = applySessionToWeeklyHistoryLocal(oldData.date, -computeMetrics(oldData).profit);
+      const rowNew = applySessionToWeeklyHistoryLocal(data.date, computeMetrics(data).profit);
       saveWeeklyHistory();
-      syncWeeklyHistoryToServer();
+      syncWeeklyHistoryRows([rowOld, rowNew]);
     }
     closeSheet();
     renderView();
@@ -2215,6 +2316,7 @@ function openSheet(id) {
       lastDeleted = { data: allSessions[idx], idx };
       allSessions.splice(idx, 1);
       saveSessions();
+      syncSessionDelete(lastDeleted.data.id);
       applySessionToWeeklyHistory(lastDeleted.data.date, -computeMetrics(lastDeleted.data).profit);
       closeSheet();
       renderView();
@@ -2253,6 +2355,7 @@ function showUndoToast(message) {
     if (lastDeleted) {
       allSessions.splice(lastDeleted.idx, 0, lastDeleted.data);
       saveSessions();
+      syncSessionRow(lastDeleted.data);
       applySessionToWeeklyHistory(lastDeleted.data.date, computeMetrics(lastDeleted.data).profit);
       renderView();
       lastDeleted = null;
@@ -2531,6 +2634,7 @@ function confirmImport(imported) {
   document.getElementById("btn-import-confirm").addEventListener("click", () => {
     allSessions = imported;
     saveSessions();
+    syncToServer(); // bulk replace is the right call here: the whole table is being swapped
     closeSheet();
     activeTab = "sessions";
     renderView();
