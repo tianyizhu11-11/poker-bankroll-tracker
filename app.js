@@ -1634,6 +1634,43 @@ function applySessionToWeeklyHistory(dateStr, profit) {
   syncWeeklyHistoryRows([row]);
 }
 
+function sessionsForWeek(year, label) {
+  const weeks = parseWeekLabel(label);
+  return allSessions
+    .filter(s => {
+      const iw = isoWeekOf(s.date);
+      return iw.year === year && weeks.includes(iw.week);
+    })
+    .sort((a, b) => (a.date + (a.startTime || "")).localeCompare(b.date + (b.startTime || "")));
+}
+
+function openWeekDetail(year, label) {
+  const list = sessionsForWeek(year, label);
+  const total = list.reduce((sum, s) => sum + computeMetrics(s).profit, 0);
+  sheetEl.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h2 style="margin:0">${year} ${escapeHtml(label)}</h2>
+      <button id="btn-close-week" style="background:none;border:none;font-size:24px;color:var(--series-1);line-height:1;padding:4px">&times;</button>
+    </div>
+    <div class="stat-grid" style="margin-bottom:16px">
+      <div class="stat-tile">
+        <div class="label">本周盈亏</div>
+        <div class="value ${total >= 0 ? "good" : "bad"}">${moneySigned(total)}</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">局数</div>
+        <div class="value">${list.length}</div>
+      </div>
+    </div>
+    ${list.length ? list.map(s => renderLocSessionRow(s)).join("") : `<div class="empty-state"><div class="big">📝</div><p>这周没有记录</p></div>`}
+  `;
+  showOverlay();
+  document.getElementById("btn-close-week").addEventListener("click", closeSheet);
+  sheetEl.querySelectorAll("[data-loc-session-id]").forEach(row => {
+    row.addEventListener("click", () => openSessionDetail(row.dataset.locSessionId));
+  });
+}
+
 function renderWeeklyHistoryTab() {
   if (!WEEKLY_HISTORY.length) {
     view.innerHTML = `<div class="empty-state"><div class="big">📝</div><p>还没有数据</p></div>`;
@@ -1667,7 +1704,7 @@ function renderWeeklyHistoryTab() {
     ${years.map(y => `
       <div class="section-title">${y}</div>
       ${groups[y].map(w => `
-        <div class="session-row">
+        <div class="session-row" data-week-year="${w[0]}" data-week-label="${escapeHtml(w[1])}">
           <div class="session-main"><div class="title">${w[1]}</div></div>
           <div class="session-side">
             <div class="profit${w[2] != null ? (w[2] >= 0 ? " good" : " bad") : ""}">${w[2] != null ? moneySigned(w[2]) : "--"}</div>
@@ -1677,6 +1714,9 @@ function renderWeeklyHistoryTab() {
     `).join("")}
   `;
   drawLineChart(document.getElementById("weeklyHistChartWrap"), points, { dashed: true, xTicks });
+  view.querySelectorAll("[data-week-year]").forEach(row => {
+    row.addEventListener("click", () => openWeekDetail(+row.dataset.weekYear, row.dataset.weekLabel));
+  });
 }
 
 function renderDailyBalanceTab() {
