@@ -29,6 +29,7 @@ async function ensureSchema(db) {
   await db.prepare(
     `CREATE TABLE IF NOT EXISTS daily_balance (id TEXT PRIMARY KEY, date TEXT, cash REAL, casino REAL, cash2 REAL, createdAt INTEGER)`
   ).run();
+  try { await db.prepare(`ALTER TABLE daily_balance ADD COLUMN notes TEXT DEFAULT ''`).run(); } catch (e) { /* column already exists */ }
 }
 
 async function isAuthorized(request, env) {
@@ -130,7 +131,7 @@ async function handlePutWeekly(request, env, id) {
 
 async function handleGetDailyBalance(env) {
   const { results } = await env.DB.prepare(
-    "SELECT id, date, cash, casino, cash2, createdAt FROM daily_balance ORDER BY date, createdAt"
+    "SELECT id, date, cash, casino, cash2, createdAt, notes FROM daily_balance ORDER BY date, createdAt"
   ).all();
   return Response.json(results);
 }
@@ -141,8 +142,8 @@ async function handlePostDailyBalance(request, env) {
   const stmts = [env.DB.prepare("DELETE FROM daily_balance")];
   for (const r of rows) {
     stmts.push(
-      env.DB.prepare(`INSERT INTO daily_balance (id, date, cash, casino, cash2, createdAt) VALUES (?, ?, ?, ?, ?, ?)`)
-        .bind(String(r[4] || ""), String(r[0] || ""), +r[1] || 0, +r[2] || 0, +r[3] || 0, +r[5] || 0)
+      env.DB.prepare(`INSERT INTO daily_balance (id, date, cash, casino, cash2, createdAt, notes) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .bind(String(r[4] || ""), String(r[0] || ""), +r[1] || 0, +r[2] || 0, +r[3] || 0, +r[5] || 0, String(r[6] || ""))
     );
   }
   const CHUNK = 100;
@@ -155,9 +156,9 @@ async function handlePostDailyBalance(request, env) {
 async function handlePutDailyBalance(request, env, id) {
   const r = await request.json();
   await env.DB.prepare(
-    `INSERT INTO daily_balance (id, date, cash, casino, cash2, createdAt) VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET date=excluded.date, cash=excluded.cash, casino=excluded.casino, cash2=excluded.cash2, createdAt=excluded.createdAt`
-  ).bind(id, String(r.date || ""), +r.cash || 0, +r.casino || 0, +r.cash2 || 0, +r.createdAt || 0).run();
+    `INSERT INTO daily_balance (id, date, cash, casino, cash2, createdAt, notes) VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET date=excluded.date, cash=excluded.cash, casino=excluded.casino, cash2=excluded.cash2, createdAt=excluded.createdAt, notes=excluded.notes`
+  ).bind(id, String(r.date || ""), +r.cash || 0, +r.casino || 0, +r.cash2 || 0, +r.createdAt || 0, String(r.notes || "")).run();
   return Response.json({ ok: true });
 }
 

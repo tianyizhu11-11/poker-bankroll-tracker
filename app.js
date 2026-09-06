@@ -1485,7 +1485,7 @@ async function syncDailyBalanceFromServer() {
     const serverData = await res.json();
     if (!Array.isArray(serverData)) return;
     if (serverData.length > 0) {
-      DAILY_BALANCE = serverData.map(r => [r.date, r.cash, r.casino, r.cash2 || 0, r.id, r.createdAt || 0]);
+      DAILY_BALANCE = serverData.map(r => [r.date, r.cash, r.casino, r.cash2 || 0, r.id, r.createdAt || 0, r.notes || ""]);
       saveDailyBalance();
       if (activeSection === "note2") renderView();
     } else if (DAILY_BALANCE.length > 0) {
@@ -1507,18 +1507,18 @@ function dailyBalanceWithTotals() {
   return sortedDailyBalance().map(r => {
     runCash += r[1];
     runCasino += r[2];
-    return { date: r[0], cashDelta: r[1], casinoDelta: r[2], cash2: r[3] || 0, id: r[4], createdAt: r[5] || 0, cash: runCash, casino: runCasino };
+    return { date: r[0], cashDelta: r[1], casinoDelta: r[2], cash2: r[3] || 0, id: r[4], createdAt: r[5] || 0, notes: r[6] || "", cash: runCash, casino: runCasino };
   });
 }
 // Single-row writes, mirroring syncSessionRow/syncWeeklyHistoryRow above.
 function syncDailyBalanceRow(row) {
-  const [date, cash, casino, cash2, id, createdAt] = row;
+  const [date, cash, casino, cash2, id, createdAt, notes] = row;
   const token = getAuthToken();
   if (!token) return;
   fetch(`${DAILY_BALANCE_API_URL}/${encodeURIComponent(id)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-    body: JSON.stringify({ date, cash, casino, cash2, createdAt }),
+    body: JSON.stringify({ date, cash, casino, cash2, createdAt, notes: notes || "" }),
   }).then(res => {
     if (res.status === 401) {
       localStorage.removeItem(AUTH_KEY);
@@ -1543,9 +1543,9 @@ function syncDailyBalanceDelete(id) {
     }
   }).catch(() => showToast("网络异常,每日余额已保存在本机"));
 }
-function upsertDailyBalance(id, date, cash, casino, cash2, createdAt) {
+function upsertDailyBalance(id, date, cash, casino, cash2, createdAt, notes) {
   const idx = DAILY_BALANCE.findIndex(r => r[4] === id);
-  const row = [date, cash, casino, cash2, id, createdAt];
+  const row = [date, cash, casino, cash2, id, createdAt, notes || ""];
   if (idx >= 0) DAILY_BALANCE[idx] = row;
   else DAILY_BALANCE.push(row);
   saveDailyBalance();
@@ -1766,7 +1766,10 @@ function renderDailyBalanceTab() {
       list.forEach(r => dateCounts.set(r.date, (dateCounts.get(r.date) || 0) + 1));
       return reversed.map(r => `
       <div class="session-row" data-db-id="${r.id}">
-        <div class="session-main"><div class="title">${r.date}${dateCounts.get(r.date) > 1 ? " " + fmtTimeFromMs(r.createdAt) : ""}</div></div>
+        <div class="session-main">
+          <div class="title">${r.date}${dateCounts.get(r.date) > 1 ? " " + fmtTimeFromMs(r.createdAt) : ""}</div>
+          ${r.notes ? `<div class="meta">${escapeHtml(r.notes)}</div>` : ""}
+        </div>
         <div class="session-side">
           <div class="profit">${money(r.cash)}</div>
           <div class="hourly">Casino ${money(r.casino)} · Cash2 ${money(r.cash2)}</div>
@@ -1807,6 +1810,7 @@ function openDailyBalanceSheet(id) {
   const prevCash2 = prevTotals.cash2;
   const initCashDelta = existing ? existing[1] : "";
   const initCasinoDelta = existing ? existing[2] : "";
+  const initNotes = existing ? existing[6] || "" : "";
   sheetEl.innerHTML = `
     <h2>${existing ? "编辑当日余额" : "记一天余额"}</h2>
     <div class="field">
@@ -1830,6 +1834,10 @@ function openDailyBalanceSheet(id) {
     <div style="font-size:12.5px;color:var(--text-muted);margin:-8px 0 16px;text-align:right" id="db-cash-hint"></div>
     <div style="font-size:12.5px;color:var(--text-muted);margin:-8px 0 16px;text-align:right" id="db-casino-hint"></div>
     <div style="font-size:12.5px;color:var(--text-muted);margin:-8px 0 16px;text-align:right" id="db-total-hint"></div>
+    <div class="field">
+      <label>备注</label>
+      <textarea id="db-notes" rows="2" placeholder="选填,比如这笔变动是取现/小费/对不上原因">${escapeHtml(initNotes)}</textarea>
+    </div>
     <div class="btn-row">
       <button class="btn btn-secondary" id="db-cancel">取消</button>
       <button class="btn btn-primary" id="db-save">保存</button>
@@ -1868,7 +1876,8 @@ function openDailyBalanceSheet(id) {
     const cashDelta = +document.getElementById("db-cash").value || 0;
     const casinoDelta = +document.getElementById("db-casino").value || 0;
     const cash2 = +document.getElementById("db-cash2").value || 0;
-    upsertDailyBalance(entryId, d, cashDelta, casinoDelta, cash2, entryCreatedAt);
+    const notes = document.getElementById("db-notes").value.trim();
+    upsertDailyBalance(entryId, d, cashDelta, casinoDelta, cash2, entryCreatedAt, notes);
     closeSheet();
     renderView();
   });
