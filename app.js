@@ -140,8 +140,8 @@ function toDate(dateStr, timeStr) {
   return new Date(dateStr + "T" + (timeStr || "00:00") + ":00");
 }
 function computeMetrics(s) {
-  const buyIn = +s.buyIn || 0, rebuy = +s.rebuy || 0, cashOut = +s.cashOut || 0;
-  const profit = cashOut - buyIn - rebuy;
+  const buyIn = +s.buyIn || 0, rebuy = +s.rebuy || 0, cashOut = +s.cashOut || 0, expenses = +s.expenses || 0;
+  const profit = cashOut - buyIn - rebuy - expenses;
   const atRisk = buyIn + rebuy;
   const roi = atRisk > 0 ? (profit / atRisk) * 100 : null;
   let durationMin = 0;
